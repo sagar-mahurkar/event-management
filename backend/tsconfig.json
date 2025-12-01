@@ -1,50 +1,28 @@
 {
-  // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
-    // File Layout
-    // "rootDir": "./src",
-    "outDir": "./build",
-
-    // Environment Settings
-    // See also https://aka.ms/tsconfig/module
-    "module": "commonjs",
     "target": "es6",
-    "types": [],
-    // For nodejs:
-    "lib": ["es5", "es6"],
-    // "types": ["node"],
-    // and npm install -D @types/node
+    "module": "commonjs",
+    "outDir": "./build",
+    "rootDir": "./src",
+
     "moduleResolution": "node",
     "esModuleInterop": true,
-
-
-    // Other Outputs
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
-    "sourceMap": true,
-    // "declaration": true,
-    // "declarationMap": true,
     "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
 
-    // Stricter Typechecking Options
-    // "noUncheckedIndexedAccess": true,
-    // "exactOptionalPropertyTypes": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
 
-    // Style Options
-    // "noImplicitReturns": true,
-    // "noImplicitOverride": true,
-    // "noUnusedLocals": true,
-    // "noUnusedParameters": true,
-    // "noFallthroughCasesInSwitch": true,
-    // "noPropertyAccessFromIndexSignature": true,
+    "lib": ["es5", "es6"],
 
-    // Recommended Options
-    // "strict": true,
-    // "jsx": "react-jsx",
-    // "verbatimModuleSyntax": true,
-    // "isolatedModules": true,
-    // "noUncheckedSideEffectImports": true,
-    // "moduleDetection": "force",
+    "typeRoots": ["./src/types", "./node_modules/@types"],
+
     "skipLibCheck": true,
-  }
+    "sourceMap": true
+  },
+
+  "include": [
+    "src/**/*.ts",
+    "src/types/**/*.d.ts"
+  ]
 }
