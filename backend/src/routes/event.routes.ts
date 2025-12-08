@@ -3,6 +3,7 @@ import { EventController } from "../controllers/EventController";
 import { UserAuth } from "../middleware/authMiddleware";
 import { roleMiddleware } from "../middleware/roleMiddleware";
 import { UserRole } from "../utils/enums";
+import { upload } from "../middleware/upload";
 
 class EventRouter {
     private _router = Router();
@@ -33,10 +34,12 @@ class EventRouter {
             this._controller.getMyEvents
         );
 
+
         // Create Event
         this._router.post(
             "/",
             roleMiddleware([UserRole.ORGANIZER, UserRole.ADMIN]),
+            upload.single("banner"),
             this._controller.createEvent
         );
 
@@ -46,6 +49,18 @@ class EventRouter {
             roleMiddleware([UserRole.ORGANIZER, UserRole.ADMIN]),
             this._controller.updateEvent
         );
+
+        // Update ONLY media files (banner + video)
+        this._router.patch(
+            "/:id/media",
+            roleMiddleware([UserRole.ORGANIZER, UserRole.ADMIN]),
+            upload.fields([
+                { name: "banner", maxCount: 1 },
+                { name: "video", maxCount: 1 },
+            ]),
+            this._controller.updateEventMedia
+        );
+
 
         // Delete Event (Admin only)
         this._router.delete(

@@ -1,11 +1,13 @@
-import { JwtPayload } from "./jwtPayload"; // or wherever your token payload type is
+import { JwtPayload } from "./jwtPayload";
 
 declare global {
   namespace Express {
     interface Request {
-      user?: JwtPayload;   // allow req.user
+      user?: JwtPayload;                 // for authentication
+      file?: Express.Multer.File;        // for single file
+      files?: Express.Multer.File[];     // for multiple files
     }
   }
 }
 
-export{};
+export {};

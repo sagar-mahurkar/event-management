@@ -62,7 +62,7 @@ export class Event {
     updatedAt: Date;
 
     // -------- Relations --------
-    @OneToMany(() => TicketType, (ticketType) => ticketType.event)
+    @OneToMany(() => TicketType, (ticketType) => ticketType.event, { cascade: true })
     ticketTypes: TicketType[];
 
     @OneToMany(() => Booking, (booking) => booking.event)
