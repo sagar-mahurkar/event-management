@@ -61,7 +61,7 @@ export class EventController {
 
             const event = await this.eventService.createEvent(eventData, req.user.id);
 
-            res.status(201).json({ success: true, data: event });
+            res.status(201).json({ success: true, event });
         } catch (error) {
             next(error);
         }
