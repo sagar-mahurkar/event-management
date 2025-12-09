@@ -49,21 +49,25 @@ export class EventController {
     createEvent = async (req: Request, res: Response, next: NextFunction) => {
         try {
             let bannerUrl = null;
+
             if (req.file) {
-                bannerUrl = req.file.path; // Cloudinary URL
+                bannerUrl = req.file.path;
             }
+
             const eventData = {
                 ...req.body,
-                bannerImage: bannerUrl,  // <--- add to event data
+                bannerImage: bannerUrl,
             };
+
             const event = await this.eventService.createEvent(eventData, req.user.id);
+
             res.status(201).json({ success: true, data: event });
         } catch (error) {
             next(error);
         }
     };
 
-    // -------- Update Event --------
+    // -------- Update Event (text fields) --------
     updateEvent = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const event = await this.eventService.updateEvent(req.params.id, req.body);
@@ -72,26 +76,37 @@ export class EventController {
             next(error);
         }
     };
-    
+
     // -------- Update Event Media (banner + video) --------
     updateEventMedia = async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const bannerFile = req.files && (req.files as any).banner?.[0];
-            const videoFile = req.files && (req.files as any).video?.[0];
+            const id = req.params.id;
 
-            const updates: any = {};
+            const banner = req.files?.["banner"]?.[0];
+            const video = req.files?.["video"]?.[0];
 
-            if (bannerFile) updates.bannerImage = bannerFile.path;
-            if (videoFile) updates.teaserVideo = videoFile.path;
+            const updatedData: any = {};
 
-            const updatedEvent = await this.eventService.updateEvent(req.params.id, updates);
+            if (banner) {
+                updatedData.bannerImage = banner.path;
+            }
+            if (video) {
+                updatedData.teaserVideo = video.path;
+            }
 
-            res.json({ success: true, data: updatedEvent });
+            if (!banner && !video) {
+                return res.status(400).json({ success: false, message: "No media uploaded" });
+            }
+
+            // Use EventService instead of repo.direct
+            const updatedEvent = await this.eventService.updateEvent(id, updatedData);
+
+            return res.json({ success: true, message: "Media updated", data: updatedEvent });
         } catch (error) {
-            next(error);
+            console.error("Media Update Error:", error);
+            return res.status(500).json({ success: false, message: "Failed to update media" });
         }
     };
-
 
     // -------- Delete Event --------
     deleteEvent = async (req: Request, res: Response, next: NextFunction) => {

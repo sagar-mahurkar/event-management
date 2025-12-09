@@ -15,20 +15,23 @@ export const createApp = () => {
     const app = express();
 
     app.use(cors());
-    app.use(express.json());
     app.use(morgan("dev"));
 
-    // Routes
+    // ⛔ IMPORTANT: Events route BEFORE express.json()
+    app.use("/api/events", eventRoutes);
+
+    // ⛔ Only AFTER multer routes
+    app.use(express.json());
+
+    // Other routes (json-only)
     app.use("/api/auth", authRoutes);
     app.use("/api/admin", adminRoutes);
     app.use("/api/users", userRoutes);
-    app.use("/api/events", eventRoutes);
     app.use("/api/bookings", bookingRoutes);
     app.use("/api/reviews", reviewRoutes);
     app.use("/api/tickets", ticketRoutes);
     app.use("/api/reports", reportRoutes);
 
-    // Error Handler
     app.use(errorMiddleware);
 
     return app;

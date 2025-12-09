@@ -19,23 +19,21 @@ class EventRouter {
 
     private _configure() {
 
-        // ---------------- PUBLIC ROUTES ----------------
+        // ---------- PUBLIC ROUTES ----------
         this._router.get("/search", this._controller.searchEvents);
         this._router.get("/", this._controller.getAllEvents);
         this._router.get("/:id", this._controller.getEventById);
 
-        // ---------------- PROTECTED ROUTES ----------------
+        // ---------- PROTECTED ----------
         this._router.use(UserAuth.verifyJWT);
 
-        // Organizer Dashboard
         this._router.get(
             "/organizer/my-events",
             roleMiddleware([UserRole.ORGANIZER, UserRole.ADMIN]),
             this._controller.getMyEvents
         );
 
-
-        // Create Event
+        // Create event (with banner)
         this._router.post(
             "/",
             roleMiddleware([UserRole.ORGANIZER, UserRole.ADMIN]),
@@ -43,26 +41,51 @@ class EventRouter {
             this._controller.createEvent
         );
 
-        // Update Event
+        // Update basic text
         this._router.put(
             "/:id",
             roleMiddleware([UserRole.ORGANIZER, UserRole.ADMIN]),
             this._controller.updateEvent
         );
 
-        // Update ONLY media files (banner + video)
+        // ---------- UPDATE MEDIA (BANNER + VIDEO) ----------
         this._router.patch(
             "/:id/media",
+
+            (req, res, next) => {
+                console.log("🔥 Reached PATCH /events/:id/media BEFORE Multer");
+                next();
+            },
+
             roleMiddleware([UserRole.ORGANIZER, UserRole.ADMIN]),
+
             upload.fields([
                 { name: "banner", maxCount: 1 },
                 { name: "video", maxCount: 1 },
             ]),
+
+            // Multer error handler fix (THIS WAS MISSING)
+            (err, req, res, next) => {
+                if (err) {
+                    console.log("❌ Multer Error:", err);
+                    return res.status(400).json({
+                        success: false,
+                        message: err.message || "Upload failed",
+                    });
+                }
+                next();
+            },
+
+            (req, res, next) => {
+                console.log("📁 Uploaded files:", req.files);
+                console.log("📨 Body:", req.body);
+                next();
+            },
+
             this._controller.updateEventMedia
         );
 
-
-        // Delete Event (Admin only)
+        // Delete
         this._router.delete(
             "/:id",
             roleMiddleware([UserRole.ADMIN]),
