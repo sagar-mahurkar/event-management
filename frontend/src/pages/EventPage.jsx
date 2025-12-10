@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import BookTicketModal from "../components/BookTicketModal";
 
 const EventPage = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
+
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -11,12 +13,10 @@ const EventPage = () => {
 
   const BASE_URL = trimTrailingSlash(import.meta.env.VITE_BASE_URL || "");
 
-  // Helper: trim trailing slash
   function trimTrailingSlash(s) {
     return s ? s.replace(/\/+$/, "") : "";
   }
 
-  // Fetch event details from backend
   const fetchEvent = async () => {
     setLoading(true);
     try {
@@ -28,7 +28,7 @@ const EventPage = () => {
         return;
       }
 
-      setEvent(json.data); // updated event including ticket availability
+      setEvent(json.data);
     } catch (err) {
       console.error(err);
       setError("Something went wrong");
@@ -37,10 +37,31 @@ const EventPage = () => {
     }
   };
 
-  // Fetch event on mount or when ID changes
   useEffect(() => {
     fetchEvent();
   }, [id]);
+
+  // 🔒 BOOK NOW: Check login + attendee role
+  const handleBookClick = () => {
+    const storedUser = localStorage.getItem("user");
+
+    // Not logged in → redirect
+    if (!storedUser) {
+      navigate("/login");
+      return;
+    }
+
+    const user = JSON.parse(storedUser);
+
+    // Logged in but not attendee → stop
+    if (user.role !== "attendee") {
+      alert("Only attendees can book tickets.");
+      return;
+    }
+
+    // Logged in attendee → open modal
+    setShowModal(true);
+  };
 
   if (loading) return <div className="text-center mt-5">Loading event...</div>;
   if (error) return <div className="text-center text-danger mt-5">{error}</div>;
@@ -74,12 +95,8 @@ const EventPage = () => {
 
         <div className="mt-4 p-3 border rounded bg-light">
           <h5 className="mb-2">Organizer</h5>
-          <p className="m-0">
-            <strong>Name:</strong> {event.creator.name}
-          </p>
-          <p className="m-0">
-            <strong>Email:</strong> {event.creator.email}
-          </p>
+          <p className="m-0"><strong>Name:</strong> {event.creator.name}</p>
+          <p className="m-0"><strong>Email:</strong> {event.creator.email}</p>
         </div>
 
         {event.teaserVideo && (
@@ -96,7 +113,7 @@ const EventPage = () => {
         <div className="d-flex justify-content-end mt-4">
           <button
             className="btn btn-success btn-lg px-4"
-            onClick={() => setShowModal(true)}
+            onClick={handleBookClick}
           >
             Book Now
           </button>
@@ -106,7 +123,7 @@ const EventPage = () => {
           <BookTicketModal
             event={event}
             onClose={() => setShowModal(false)}
-            refreshEvent={fetchEvent} // ✅ ensures availability updates after booking
+            refreshEvent={fetchEvent}
           />
         )}
       </div>

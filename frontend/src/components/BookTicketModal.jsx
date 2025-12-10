@@ -6,13 +6,19 @@ const BookTicketModal = ({ event: initialEvent, onClose, refreshEvent }) => {
   const [ticketTypeId, setTicketTypeId] = useState("");
   const [quantity, setQuantity] = useState(1);
 
-  // Update local event state whenever parent refreshEvent fetches new data
   useEffect(() => {
     setEvent(initialEvent);
   }, [initialEvent]);
 
-  // Compute available tickets for a given ticket type
-  const computeAvailable = (tt) => Number(tt.availableQuantity || 0);
+  const computeAvailable = (tt) => {
+    if (!event.bookings) return Number(tt.limit) || 0;
+
+    const booked = event.bookings
+      .filter(b => b.ticketTypeId === tt.id && b.status !== "cancelled")
+      .reduce((sum, b) => sum + Number(b.quantity || 0), 0);
+
+    return Math.max(0, tt.limit - booked);
+  };
 
   const selectedTicket =
     event.ticketTypes.find((t) => String(t.id) === String(ticketTypeId)) || null;
@@ -20,13 +26,29 @@ const BookTicketModal = ({ event: initialEvent, onClose, refreshEvent }) => {
   const available = selectedTicket ? computeAvailable(selectedTicket) : 0;
 
   const handleSubmit = async () => {
+    const token = localStorage.getItem("token");
+    const user = JSON.parse(localStorage.getItem("user"));
+
+    // 🔒 Must be logged in
+    if (!token || !user) {
+      alert("Please login before booking tickets.");
+      onClose();
+      window.location.href = "/login";
+      return;
+    }
+
+    // 🔒 Must be attendee
+    if (user.role !== "attendee") {
+      alert("Only attendees can book tickets.");
+      onClose();
+      return;
+    }
+
     if (!ticketTypeId) return alert("Please select a ticket type");
     if (quantity < 1) return alert("Quantity must be at least 1");
     if (quantity > available) return alert(`Only ${available} tickets left`);
 
     try {
-      const token = localStorage.getItem("token");
-
       await axios.post(
         `${import.meta.env.VITE_BASE_URL}bookings`,
         {
@@ -39,16 +61,14 @@ const BookTicketModal = ({ event: initialEvent, onClose, refreshEvent }) => {
 
       alert("Booking successful!");
 
-      // Refresh parent event to update ticket availability
       const updatedEvent = await refreshEvent();
-      setEvent(updatedEvent); // update local state to reflect new availability
+      if (updatedEvent) setEvent(updatedEvent);
 
-      // Reset form
       setTicketTypeId("");
       setQuantity(1);
-
       onClose();
     } catch (err) {
+      console.error(err);
       alert(err.response?.data?.message || "Booking failed");
     }
   };
@@ -70,7 +90,7 @@ const BookTicketModal = ({ event: initialEvent, onClose, refreshEvent }) => {
               const left = computeAvailable(tt);
               return (
                 <option key={tt.id} value={tt.id} disabled={left <= 0}>
-                  {tt.type} {left > 0 ? `— ${left} left` : "— Sold Out"}
+                  {tt.type} — {left > 0 ? `${left} left` : "Sold Out"}
                 </option>
               );
             })}
@@ -88,7 +108,9 @@ const BookTicketModal = ({ event: initialEvent, onClose, refreshEvent }) => {
                 onChange={(e) => setQuantity(Number(e.target.value))}
               />
 
-              <p className="mt-2">Price: ₹{selectedTicket.price}</p>
+              <p className="mt-2">
+                Price per ticket: <strong>₹{selectedTicket.price}</strong>
+              </p>
               <p>Available: {available}</p>
             </>
           )}

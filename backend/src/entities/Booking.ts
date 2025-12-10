@@ -34,7 +34,9 @@ export class Booking {
     eventId: number;
 
     // ---- TICKET TYPE RELATION ----
-    @ManyToOne(() => TicketType, (ticketType) => ticketType.bookings)
+    @ManyToOne(() => TicketType, (ticketType) => ticketType.bookings, {
+        eager: true,     // <-- ensures relation always loads
+    })
     @JoinColumn({ name: "ticket_type_id" })
     ticketType: TicketType;
 

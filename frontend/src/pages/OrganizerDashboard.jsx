@@ -13,6 +13,7 @@ const OrganizerDashboard = () => {
 
     const [showModal, setShowModal] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState(null);
+
     const [showCreate, setShowCreate] = useState(false);
 
     const [showTicketType, setShowTicketType] = useState(false);
@@ -22,7 +23,7 @@ const OrganizerDashboard = () => {
     // Load Organizer From Local Storage
     // ============================================
     const [organizer, setOrganizer] = useState(null);
-
+    
     useEffect(() => {
         const raw = localStorage.getItem("user");
         if (raw) {
@@ -35,7 +36,7 @@ const OrganizerDashboard = () => {
     }, []);
 
     const axiosAuth = axios.create({
-        baseURL: BASE_URL,
+        baseURL: BASE_URL.replace(/\/+$/, ""),
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
     });
 
@@ -58,7 +59,9 @@ const OrganizerDashboard = () => {
         }
     };
 
-    useEffect(() => { loadMyEvents(); }, []);
+    useEffect(() => {
+        loadMyEvents();
+    }, []);
 
     const handleSave = (updatedEvent) => {
         setEvents((prev) =>
@@ -72,9 +75,7 @@ const OrganizerDashboard = () => {
         <div style={{ padding: "2rem" }}>
             <h2>Organizer Dashboard</h2>
 
-            {/* ================================
-                Organizer Name + Email
-            ================================= */}
+            {/* Organizer Info */}
             <p>
                 <strong>Welcome:</strong> {organizer?.name || "Organizer"}
             </p>
@@ -140,7 +141,12 @@ const OrganizerDashboard = () => {
                                 <td>{allocated} / {ev.capacity}</td>
 
                                 <td>
-                                    {(ev.bookings ?? []).length}
+                                    {
+                                        (ev.bookings ?? [])
+                                            .filter((b) => b.status !== "cancelled")   // ignore cancelled
+                                            .reduce((sum, b) => sum + (Number(b.quantity) || 0), 0)
+                                    }
+
                                     <button
                                         className="btn btn-sm btn-outline-info ms-2"
                                         data-bs-toggle="collapse"
@@ -149,6 +155,7 @@ const OrganizerDashboard = () => {
                                         View
                                     </button>
                                 </td>
+
 
                                 <td className="d-flex gap-2">
                                     <button
@@ -177,30 +184,48 @@ const OrganizerDashboard = () => {
                 </tbody>
             </table>
 
+            {/* ================================
+                Attendee Table (View Collapse)
+            ================================ */}
             {events.map((ev) => (
                 <div key={ev.id} className="collapse mt-2" id={`attendees-${ev.id}`}>
                     <h5>Attendees for: {ev.title}</h5>
+
                     <table className="table table-sm table-bordered">
                         <thead>
                             <tr>
                                 <th>Booking ID</th>
                                 <th>User</th>
                                 <th>Email</th>
+                                <th>Ticket Type</th>
+                                <th>Quantity</th>
+                                <th>Total Cost</th>
+                                <th>Status</th>
                                 <th>Booked At</th>
                             </tr>
                         </thead>
+
                         <tbody>
                             {(ev.bookings ?? []).length === 0 ? (
                                 <tr>
-                                    <td colSpan="4">No attendees yet</td>
+                                    <td colSpan="8">No attendees yet</td>
                                 </tr>
                             ) : (
                                 (ev.bookings ?? []).map((b) => (
                                     <tr key={b.id}>
-                                        <td>{b.id}</td>
-                                        <td>{b.user?.name}</td>
-                                        <td>{b.user?.email}</td>
-                                        <td>{new Date(b.createdAt).toLocaleString()}</td>
+                                        <td className={b.status === "cancelled" ? "text-danger" : ""}>{b.id}</td>
+                                        <td className={b.status === "cancelled" ? "text-danger" : ""}>{b.user?.name}</td>
+                                        <td className={b.status === "cancelled" ? "text-danger" : ""}>{b.user?.email}</td>
+
+                                        <td className={b.status === "cancelled" ? "text-danger" : ""}>{b.ticketType?.type || "N/A"}</td>
+                                        <td className={b.status === "cancelled" ? "text-danger" : ""}>{b.quantity}</td>
+                                        <td className={b.status === "cancelled" ? "text-danger" : ""}>₹{b.totalPrice}</td>
+
+                                        <td className={b.status === "cancelled" ? "text-danger" : ""}>{b.status}</td>
+
+                                        <td className={b.status === "cancelled" ? "text-danger" : ""}>
+                                            {new Date(b.createdAt).toLocaleString()}
+                                        </td>
                                     </tr>
                                 ))
                             )}
@@ -209,6 +234,7 @@ const OrganizerDashboard = () => {
                 </div>
             ))}
 
+            {/* Modals */}
             {showModal && selectedEvent && (
                 <EditEventModal
                     show={showModal}

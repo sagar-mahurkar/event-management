@@ -124,17 +124,26 @@ const AttendeeDashboard = () => {
             <tr><td colSpan="12" className="text-center">No records found</td></tr>
           ) : (
             data.map((b, i) => (
+              console.log("Booking Row:", b),
               <tr key={b.id}>
                 <td>{i + 1}</td>
+
+                {/* Event Info */}
                 <td>{b.event?.title}</td>
                 <td>{new Date(b.event?.dateTime).toLocaleString()}</td>
                 <td>{b.event?.location}</td>
                 <td>{b.event?.category}</td>
-                <td>{b.ticketType}</td>
-                <td>₹{b.rate}</td>
+
+                {/* Ticket Info */}
+                <td>{b.ticketType?.type}</td>
+                <td>₹{b.ticketType?.price}</td>
                 <td>{b.quantity}</td>
-                <td>₹{b.quantity * b.rate}</td>
+
+                {/* Total (backend calculated) */}
+                <td>₹{b.totalPrice}</td>
+
                 <td>{new Date(b.createdAt).toLocaleString()}</td>
+
                 <td className={b.status === "cancelled" ? "text-danger" : "text-success"}>
                   {b.status}
                 </td>
@@ -148,7 +157,7 @@ const AttendeeDashboard = () => {
 
                         try {
                           await axios.put(
-                            `${BASE_URL.replace(/\/+$/, "")}/users/bookings/${b.id}/cancel`,
+                            `${BASE_URL.replace(/\/+$/, "")}/bookings/${b.id}/cancel`,
                             {},
                             { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
                           );
@@ -158,7 +167,9 @@ const AttendeeDashboard = () => {
                           alert("Failed to cancel booking");
                         }
                       }}
-                    >Cancel</button>
+                    >
+                      Cancel
+                    </button>
                   ) : "-"}
                 </td>
               </tr>
