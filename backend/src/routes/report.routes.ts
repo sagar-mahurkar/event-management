@@ -21,16 +21,23 @@ class ReportRouter {
         // All routes require login
         this._router.use(UserAuth.verifyJWT);
 
-        // ---------------- PUBLIC ----------------
+        // USER: Create or update a report
         this._router.post("/event/:eventId", this._controller.createReport);
 
-        // ---------------- ADMIN ----------------
+        // USER: Get own reports
+        this._router.get("/user", this._controller.getUserReports);
+
+        // ADMIN: All reports
         this._router.get("/", roleMiddleware([UserRole.ADMIN]), this._controller.getAllReports);
         this._router.get("/:id", roleMiddleware([UserRole.ADMIN]), this._controller.getReportById);
         this._router.put("/:id/resolve", roleMiddleware([UserRole.ADMIN]), this._controller.resolveReport);
 
-        // ---------------- ORGANIZER ----------------
-        this._router.get("/event/:eventId", roleMiddleware([UserRole.ORGANIZER, UserRole.ADMIN]), this._controller.getEventReports);
+        // ORGANIZER/ADMIN: Get reports for event
+        this._router.get(
+            "/event/:eventId",
+            roleMiddleware([UserRole.ORGANIZER, UserRole.ADMIN]),
+            this._controller.getEventReports
+        );
     }
 }
 

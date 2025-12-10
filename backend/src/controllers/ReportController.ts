@@ -6,7 +6,7 @@ import { ReportStatus } from "../utils/enums";
 export class ReportController {
     private reportService = new ReportService();
 
-    // ---------------- CREATE REPORT ----------------
+    // ---------------- CREATE OR UPDATE REPORT ----------------
     createReport = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const userId = req.user.id;
@@ -14,13 +14,30 @@ export class ReportController {
             const { reason } = req.body;
 
             const report = await this.reportService.createReport(userId, eventId, reason);
-            res.status(201).json({ success: true, data: report });
+
+            res.status(200).json({
+                success: true,
+                message: "Report submitted successfully",
+                data: report
+            });
         } catch (error) {
             next(error);
         }
     };
 
-    // ---------------- GET ALL REPORTS ----------------
+    // ---------------- GET USER REPORTS ----------------
+    getUserReports = async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const userId = req.user.id;
+            const reports = await this.reportService.getUserReports(userId);
+
+            res.json({ success: true, data: reports });
+        } catch (error) {
+            next(error);
+        }
+    };
+
+    // ---------------- GET ALL REPORTS (ADMIN) ----------------
     getAllReports = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const reports = await this.reportService.getAllReports();
@@ -41,7 +58,7 @@ export class ReportController {
         }
     };
 
-    // ---------------- RESOLVE REPORT ----------------
+    // ---------------- RESOLVE REPORT (ADMIN) ----------------
     resolveReport = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const reportId = Number(req.params.id);
@@ -51,14 +68,15 @@ export class ReportController {
                 throw new Error("Invalid report status");
             }
 
-            const report = await this.reportService.resolveReport(reportId, status);
-            res.json({ success: true, data: report });
+            const updated = await this.reportService.resolveReport(reportId, status);
+
+            res.json({ success: true, data: updated });
         } catch (error) {
             next(error);
         }
     };
 
-    // ---------------- GET REPORTS FOR EVENT ----------------
+    // ---------------- GET EVENT REPORTS ----------------
     getEventReports = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const eventId = Number(req.params.eventId);

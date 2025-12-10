@@ -1,36 +1,85 @@
 // src/services/EventService.ts
-import { Like, Between, MoreThanOrEqual, LessThanOrEqual } from "typeorm";
+import { Between, MoreThanOrEqual, LessThanOrEqual } from "typeorm";
 import { userRepo, eventRepo } from "../utils/repositories";
 import ErrorHandler from "../middleware/errorHandler";
 import httpStatusCodes from "../errors/httpCodes";
 
 export class EventService {
 
-    // -------------------- SEARCH EVENTS WITH FILTERS --------------------
+    // -------------------- SEARCH EVENTS WITH FILTERS (QueryBuilder) --------------------
     async searchEvents(query: any) {
-        const { keyword, category, location, startDate, endDate, availableOnly, page = 1, limit = 10 } = query;
-        const where: any = {};
+        const {
+            keyword,
+            category,
+            location,
+            startDate,
+            endDate,
+            availableOnly,
+            page = 1,
+            limit = 10
+        } = query;
 
-        if (keyword) where.title = Like(`%${keyword}%`);
-        if (category) where.category = category;
-        if (location) where.location = Like(`%${location}%`);
-        if (startDate && endDate) where.dateTime = Between(new Date(startDate), new Date(endDate));
-        else if (startDate) where.dateTime = MoreThanOrEqual(new Date(startDate));
-        else if (endDate) where.dateTime = LessThanOrEqual(new Date(endDate));
+        const qb = eventRepo.createQueryBuilder("event")
+            .leftJoinAndSelect("event.creator", "creator")
+            .leftJoinAndSelect("event.bookings", "bookings")
+            .leftJoinAndSelect("event.ticketTypes", "ticketTypes")
+            .orderBy("event.dateTime", "ASC");
 
+        // --- Pagination ---
         const skip = (Number(page) - 1) * Number(limit);
-        const take = Number(limit);
+        qb.skip(skip).take(Number(limit));
 
-        const events = await eventRepo.find({
-            where,
-            skip,
-            take,
-            relations: ["creator", "bookings", "ticketTypes"],
-            order: { dateTime: "ASC" }
-        });
+        // We'll collect OR conditions for text-like matching (keyword, category, location)
+        const orConditions: string[] = [];
+        const parameters: Record<string, any> = {};
 
+        if (keyword) {
+            // search title OR description
+            orConditions.push("(LOWER(event.title) LIKE :kw OR LOWER(event.description) LIKE :kw)");
+            parameters["kw"] = `%${String(keyword).toLowerCase()}%`;
+        }
+
+        if (category) {
+            // match category OR title (so "Music" matches category and event titles)
+            orConditions.push("(LOWER(event.category) LIKE :cat OR LOWER(event.title) LIKE :cat)");
+            parameters["cat"] = `%${String(category).toLowerCase()}%`;
+        }
+
+        if (location) {
+            orConditions.push("(LOWER(event.location) LIKE :loc)");
+            parameters["loc"] = `%${String(location).toLowerCase()}%`;
+        }
+
+        // Apply OR conditions (if any)
+        if (orConditions.length > 0) {
+            // join OR pieces with OR and wrap in parenthesis
+            qb.andWhere("(" + orConditions.join(" OR ") + ")", parameters);
+        }
+
+        // Apply date filters as AND conditions (they narrow results)
+        if (startDate && endDate) {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            qb.andWhere("event.dateTime BETWEEN :startDate AND :endDate", {
+                startDate: start.toISOString(),
+                endDate: end.toISOString()
+            });
+        } else if (startDate) {
+            const start = new Date(startDate);
+            qb.andWhere("event.dateTime >= :startDate", { startDate: start.toISOString() });
+        } else if (endDate) {
+            const end = new Date(endDate);
+            qb.andWhere("event.dateTime <= :endDate", { endDate: end.toISOString() });
+        }
+
+        // Execute query
+        const events = await qb.getMany();
+
+        // availableOnly filter is applied in-memory because it depends on booking counts
         if (availableOnly) {
-            return events.filter(event => (event.capacity - (event.bookings?.length || 0)) > 0);
+            return events.filter(event =>
+                (event.capacity - (event.bookings?.length || 0)) > 0
+            );
         }
 
         return events;
@@ -51,7 +100,8 @@ export class EventService {
             relations: ["creator", "ticketTypes", "bookings"]
         });
 
-        if (!event) throw new ErrorHandler(httpStatusCodes.NOT_FOUND, "Event not found");
+        if (!event)
+            throw new ErrorHandler(httpStatusCodes.NOT_FOUND, "Event not found");
 
         // ---- Compute booked quantity per ticketType ----
         const bookedMap = new Map<number, number>();
@@ -71,7 +121,6 @@ export class EventService {
             };
         });
 
-        // ---- Return event with ticketTypes including availableQuantity ----
         return {
             ...event,
             ticketTypes: ticketTypesWithAvailability
@@ -86,7 +135,6 @@ export class EventService {
             order: { dateTime: "ASC" }
         });
 
-        // Compute availability per event for organizer dashboard
         return events.map(event => {
             const bookedMap = new Map<number, number>();
             event.bookings.forEach(b => {
@@ -109,29 +157,37 @@ export class EventService {
     // -------------------- ORGANIZER: CREATE EVENT --------------------
     async createEvent(eventData: any, userId: number) {
         const user = await userRepo.findOne({ where: { id: userId } });
-        if (!user) throw new ErrorHandler(httpStatusCodes.UN_AUTHORIZED, "Invalid user");
+        if (!user)
+            throw new ErrorHandler(httpStatusCodes.UN_AUTHORIZED, "Invalid user");
 
         const newEvent = eventRepo.create({
             ...eventData,
             creator: user,
             createdBy: user.id,
         });
+
         return await eventRepo.save(newEvent);
     }
 
     // -------------------- ORGANIZER/ADMIN: UPDATE EVENT --------------------
     async updateEvent(id: string, updateData: any) {
         const event = await eventRepo.findOne({ where: { id: Number(id) } });
-        if (!event) throw new ErrorHandler(httpStatusCodes.NOT_FOUND, "Event not found");
+        if (!event)
+            throw new ErrorHandler(httpStatusCodes.NOT_FOUND, "Event not found");
+
         Object.assign(event, updateData);
+
         return await eventRepo.save(event);
     }
 
     // -------------------- ADMIN: DELETE EVENT --------------------
     async deleteEvent(id: string) {
         const event = await eventRepo.findOne({ where: { id: Number(id) } });
-        if (!event) throw new ErrorHandler(httpStatusCodes.NOT_FOUND, "Event not found");
+        if (!event)
+            throw new ErrorHandler(httpStatusCodes.NOT_FOUND, "Event not found");
+
         await eventRepo.remove(event);
+
         return true;
     }
 }

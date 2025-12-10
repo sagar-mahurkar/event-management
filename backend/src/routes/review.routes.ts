@@ -2,8 +2,6 @@
 import { Router } from "express";
 import { ReviewController } from "../controllers/ReviewController";
 import { UserAuth } from "../middleware/authMiddleware";
-import { roleMiddleware } from "../middleware/roleMiddleware";
-import { UserRole } from "../utils/enums";
 
 class ReviewRouter {
     private _router = Router();
@@ -24,13 +22,13 @@ class ReviewRouter {
         // USER: Get own reviews
         this._router.get("/", this._controller.getUserReviews);
 
-        // USER: Leave a review
+        // USER: Leave review (create or update)
         this._router.post("/", this._controller.leaveReview);
 
-        // USER: Delete own review
+        // USER: Delete review
         this._router.delete("/:id", this._controller.deleteReview);
 
-        // PUBLIC: Get reviews for a specific event
+        // PUBLIC: Get event reviews
         this._router.get("/event/:eventId", this._controller.getEventReviews);
     }
 }

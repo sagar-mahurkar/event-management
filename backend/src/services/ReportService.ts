@@ -6,26 +6,52 @@ import httpStatusCodes from "../errors/httpCodes";
 
 export class ReportService {
 
-    // ---------------- CREATE REPORT ----------------
+    // ---------------- CREATE OR UPDATE REPORT (UPSERT) ----------------
     async createReport(userId: number, eventId: number, reason: string) {
+        if (!reason) {
+            throw new ErrorHandler(httpStatusCodes.BAD_REQUEST, "Report reason is required");
+        }
+
+        // Validate user
         const user = await userRepo.findOne({ where: { id: userId } });
         if (!user) throw new ErrorHandler(httpStatusCodes.NOT_FOUND, "User not found");
 
+        // Validate event
         const event = await eventRepo.findOne({ where: { id: eventId } });
         if (!event) throw new ErrorHandler(httpStatusCodes.NOT_FOUND, "Event not found");
 
-        if (!reason) throw new ErrorHandler(httpStatusCodes.BAD_REQUEST, "Report reason is required");
+        // Check if report already exists
+        const existing = await reportRepo.findOne({
+            where: { reportedBy: userId, eventId }
+        });
 
+        if (existing) {
+            // UPDATE EXISTING REPORT
+            existing.reason = reason;
+            existing.status = ReportStatus.PENDING; // reset to pending
+            return await reportRepo.save(existing);
+        }
+
+        // CREATE NEW REPORT
         const report = reportRepo.create({
             user,
-            reportedBy: user.id,
+            reportedBy: userId,
             event,
-            eventId: event.id,
+            eventId,
             reason,
             status: ReportStatus.PENDING
         });
 
-        return reportRepo.save(report);
+        return await reportRepo.save(report);
+    }
+
+    // ---------------- GET USER REPORTS ----------------
+    async getUserReports(userId: number) {
+        return reportRepo.find({
+            where: { reportedBy: userId },
+            relations: ["event"],
+            order: { createdAt: "DESC" }
+        });
     }
 
     // ---------------- GET ALL REPORTS ----------------
@@ -42,17 +68,21 @@ export class ReportService {
             where: { id: reportId },
             relations: ["user", "event"]
         });
+
         if (!report) throw new ErrorHandler(httpStatusCodes.NOT_FOUND, "Report not found");
+
         return report;
     }
 
     // ---------------- UPDATE REPORT STATUS ----------------
     async resolveReport(reportId: number, status: ReportStatus) {
         const report = await reportRepo.findOne({ where: { id: reportId } });
+
         if (!report) throw new ErrorHandler(httpStatusCodes.NOT_FOUND, "Report not found");
 
         report.status = status;
-        return reportRepo.save(report);
+
+        return await reportRepo.save(report);
     }
 
     // ---------------- GET REPORTS FOR EVENT ----------------
