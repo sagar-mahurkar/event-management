@@ -14,6 +14,14 @@ export class ReviewService {
         });
     }
 
+    // ---------------- GET USER REVIEW FOR SPECIFIC EVENT ----------------
+    async getUserReviewForEvent(userId: number, eventId: number) {
+        return reviewRepo.findOne({
+            where: { userId, eventId },
+            relations: ["event"]
+        });
+    }
+
     // ---------------- LEAVE OR UPDATE REVIEW (UPSERT) ----------------
     async leaveReview(
         userId: number,

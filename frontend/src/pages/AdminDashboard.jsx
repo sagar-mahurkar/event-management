@@ -14,7 +14,6 @@ const AdminDashboard = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
-    // Edit modals
     const [editUserData, setEditUserData] = useState(null);
     const [editEventData, setEditEventData] = useState(null);
 
@@ -36,7 +35,7 @@ const AdminDashboard = () => {
     }, []);
 
     const axiosAuth = axios.create({
-        baseURL: BASE_URL,
+        baseURL: BASE_URL.replace(/\/+$/, ""),
         headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
@@ -162,7 +161,52 @@ const AdminDashboard = () => {
     };
 
     // ============================================================
-    // RENDER TABLES
+    // REPORTS MODAL STATE
+    // ============================================================
+    const [showReportsModal, setShowReportsModal] = useState(false);
+    const [selectedEventReports, setSelectedEventReports] = useState([]);
+    const [reportsLoading, setReportsLoading] = useState(false);
+    const [reportsError, setReportsError] = useState("");
+
+    // Load reports for a specific event
+    const loadEventReports = async (eventId) => {
+        try {
+            setReportsLoading(true);
+            setReportsError("");
+            const res = await axiosAuth.get(`/reports/event/${eventId}`);
+            const reports = res.data.data || [];
+            setSelectedEventReports(reports);
+            setShowReportsModal(true);
+        } catch (err) {
+            setReportsError("Failed to load event reports");
+            setShowReportsModal(true);
+        } finally {
+            setReportsLoading(false);
+        }
+    };
+
+    // ============================================================
+    // RESOLVE REPORT (ADMIN)
+    // ============================================================
+    const resolveReport = async (reportId, status) => {
+        try {
+            await axiosAuth.put(`/reports/${reportId}/resolve`, { status });
+
+            // Update UI immediately
+            setSelectedEventReports((prev) =>
+                prev.map((r) =>
+                    r.id === reportId ? { ...r, status } : r
+                )
+            );
+
+            alert("Report updated successfully");
+        } catch (err) {
+            alert("Failed to update report");
+        }
+    };
+
+    // ============================================================
+    // TABLE RENDERERS
     // ============================================================
     const renderPendingOrganizers = () => (
         <>
@@ -241,7 +285,10 @@ const AdminDashboard = () => {
                             <td>{new Date(u.createdAt).toLocaleString()}</td>
 
                             <td>
-                                <button className="btn btn-primary btn-sm me-2" onClick={() => setEditUserData(u)}>
+                                <button
+                                    className="btn btn-primary btn-sm me-2"
+                                    onClick={() => setEditUserData(u)}
+                                >
                                     Edit
                                 </button>
                                 <button className="btn btn-danger btn-sm" onClick={() => deleteUser(u.id)}>
@@ -286,13 +333,26 @@ const AdminDashboard = () => {
                             <td>{ev.createdBy}</td>
                             <td>{new Date(ev.createdAt).toLocaleString()}</td>
 
-                            <td>
-                                <button className="btn btn-primary btn-sm me-2" onClick={() => setEditEventData(ev)}>
+                            <td style={{ display: "flex", gap: 8 }}>
+                                <button
+                                    className="btn btn-primary btn-sm me-2"
+                                    onClick={() => setEditEventData(ev)}
+                                >
                                     Edit
                                 </button>
 
-                                <button className="btn btn-danger btn-sm" onClick={() => deleteEvent(ev.id)}>
+                                <button
+                                    className="btn btn-danger btn-sm"
+                                    onClick={() => deleteEvent(ev.id)}
+                                >
                                     Delete
+                                </button>
+
+                                <button
+                                    className="btn btn-outline-secondary btn-sm"
+                                    onClick={() => loadEventReports(ev.id)}
+                                >
+                                    View Reports
                                 </button>
                             </td>
                         </tr>
@@ -327,9 +387,6 @@ const AdminDashboard = () => {
                     padding: "1rem"
                 }}
             >
-                {/* ===================================== */}
-                {/* SHOW ADMIN NAME + EMAIL */}
-                {/* ===================================== */}
                 <h4>Welcome, {admin?.name || "Admin"}</h4>
                 <p style={{ fontSize: "0.9rem", color: "#555" }}>{admin?.email}</p>
                 <hr />
@@ -368,7 +425,9 @@ const AdminDashboard = () => {
                 {renderContent()}
             </div>
 
-            {/* User Modal */}
+            {/* ================================
+                USER MODAL
+            ================================ */}
             {editUserData && (
                 <div className="modal show d-block" tabIndex="-1">
                     <div className="modal-dialog">
@@ -385,7 +444,9 @@ const AdminDashboard = () => {
                                     type="text"
                                     className="form-control mb-2"
                                     value={editUserData.name}
-                                    onChange={(e) => setEditUserData({ ...editUserData, name: e.target.value })}
+                                    onChange={(e) =>
+                                        setEditUserData({ ...editUserData, name: e.target.value })
+                                    }
                                 />
 
                                 <label>Email</label>
@@ -393,14 +454,18 @@ const AdminDashboard = () => {
                                     type="email"
                                     className="form-control mb-2"
                                     value={editUserData.email}
-                                    onChange={(e) => setEditUserData({ ...editUserData, email: e.target.value })}
+                                    onChange={(e) =>
+                                        setEditUserData({ ...editUserData, email: e.target.value })
+                                    }
                                 />
 
                                 <label>Role</label>
                                 <select
                                     className="form-control mb-2"
                                     value={editUserData.role}
-                                    onChange={(e) => setEditUserData({ ...editUserData, role: e.target.value })}
+                                    onChange={(e) =>
+                                        setEditUserData({ ...editUserData, role: e.target.value })
+                                    }
                                 >
                                     <option>attendee</option>
                                     <option>organizer</option>
@@ -409,8 +474,12 @@ const AdminDashboard = () => {
                             </div>
 
                             <div className="modal-footer">
-                                <button className="btn btn-secondary" onClick={() => setEditUserData(null)}>Cancel</button>
-                                <button className="btn btn-primary" onClick={saveUserChanges}>Save Changes</button>
+                                <button className="btn btn-secondary" onClick={() => setEditUserData(null)}>
+                                    Cancel
+                                </button>
+                                <button className="btn btn-primary" onClick={saveUserChanges}>
+                                    Save Changes
+                                </button>
                             </div>
 
                         </div>
@@ -418,7 +487,9 @@ const AdminDashboard = () => {
                 </div>
             )}
 
-            {/* Event Modal */}
+            {/* ================================
+                EVENT MODAL
+            ================================ */}
             {editEventData && (
                 <EditEventModal
                     show={true}
@@ -430,6 +501,89 @@ const AdminDashboard = () => {
                 />
             )}
 
+            {/* ================================
+                REPORTS MODAL
+            ================================ */}
+            {showReportsModal && (
+                <div className="modal-backdrop d-flex justify-content-center align-items-center"
+                     style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)" }}>
+                    <div className="card p-3" style={{ minWidth: 700, maxHeight: "80vh", overflowY: "auto" }}>
+                        <div className="d-flex justify-content-between align-items-center">
+                            <h5>Event Reports</h5>
+                            <button className="btn-close" onClick={() => setShowReportsModal(false)} />
+                        </div>
+
+                        {reportsLoading && <p>Loading reports…</p>}
+                        {reportsError && <p className="text-danger">{reportsError}</p>}
+
+                        {!reportsLoading && selectedEventReports.length === 0 && (
+                            <p className="mt-3">No reports found for this event.</p>
+                        )}
+
+                        {!reportsLoading && selectedEventReports.length > 0 && (
+                            <table className="table table-bordered mt-3 mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>User</th>
+                                        <th>Reason</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                        <th>Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {selectedEventReports.map((r, i) => (
+                                        <tr key={r.id}>
+                                            <td>{i + 1}</td>
+                                            <td>{r.user?.name || r.user?.email}</td>
+                                            <td>{r.reason}</td>
+                                            <td>{r.status}</td>
+
+                                            <td style={{ whiteSpace: "nowrap" }}>
+                                                <select
+                                                    className="form-select form-select-sm d-inline-block w-auto me-2"
+                                                    defaultValue=""
+                                                    id={`resolve-${r.id}`}
+                                                >
+                                                    <option value="" disabled>
+                                                        Change Status
+                                                    </option>
+                                                    <option value="resolved">Resolved</option>
+                                                    <option value="dismissed">Dismissed</option>
+                                                </select>
+
+                                                <button
+                                                    className="btn btn-sm btn-success"
+                                                    onClick={() => {
+                                                        const status =
+                                                            document.getElementById(`resolve-${r.id}`).value;
+                                                        if (!status) {
+                                                            alert("Please select a status");
+                                                            return;
+                                                        }
+                                                        resolveReport(r.id, status);
+                                                    }}
+                                                >
+                                                    Update
+                                                </button>
+                                            </td>
+
+                                            <td>{new Date(r.createdAt).toLocaleString()}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+
+                        <div className="mt-3 text-end">
+                            <button className="btn btn-secondary" onClick={() => setShowReportsModal(false)}>
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

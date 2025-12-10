@@ -26,6 +26,7 @@ enum TicketCategory {
 enum ReportStatus {
     PENDING = 'pending',
     RESOLVED = 'resolved',
+    DISMISSED = 'dismissed',
 }
 
 enum BookingStatus {

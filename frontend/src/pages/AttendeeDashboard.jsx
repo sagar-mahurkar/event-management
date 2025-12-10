@@ -1,14 +1,11 @@
+// src/pages/AttendeeDashboard.jsx
 import { useEffect, useState } from "react";
 import axios from "axios";
 
-const BASE_URL = import.meta.env.VITE_BASE_URL; // e.g. "http://localhost:5000/api/"
+const BASE_URL = import.meta.env.VITE_BASE_URL; // should end with '/api/' or similar
 
 const AttendeeDashboard = () => {
-  // ===========================================
-  // USER FROM LOCAL STORAGE
-  // ===========================================
   const [attendee, setAttendee] = useState(null);
-
   useEffect(() => {
     try {
       const raw = localStorage.getItem("user");
@@ -18,48 +15,41 @@ const AttendeeDashboard = () => {
     }
   }, []);
 
-  // ===========================================
-  // DASHBOARD STATE
-  // ===========================================
   const [selected, setSelected] = useState("upcoming");
   const [upcoming, setUpcoming] = useState([]);
   const [past, setPast] = useState([]);
   const [cancelled, setCancelled] = useState([]);
+
   const [myReviews, setMyReviews] = useState([]);
   const [myReports, setMyReports] = useState([]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ===========================================
-  // MODALS
-  // ===========================================
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
 
-  // ===========================================
-  // AUTH AXIOS INSTANCE (use baseURL so calls are consistent)
-  // ===========================================
+  // Review form state (controlled)
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewText, setReviewText] = useState("");
+  const [editingReviewId, setEditingReviewId] = useState(null); // if editing existing review
+
+  const [reportReason, setReportReason] = useState("");
+  const [editingReportId, setEditingReportId] = useState(null);
+
   const axiosAuth = axios.create({
-    baseURL: BASE_URL.replace(/\/+$/, "") + "/", // ensures trailing slash
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
-    },
+    baseURL: (BASE_URL || "").replace(/\/+$/, "") + "/",
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
   });
 
-  // ===========================================
-  // LOAD BOOKINGS
-  // ===========================================
+  // Load bookings
   const loadBookings = async () => {
     try {
       setLoading(true);
       setError("");
-
       const res = await axiosAuth.get("users/bookings");
-
-      const bookings =
-        res.data.bookings || res.data.data?.bookings || res.data.data || [];
+      const bookings = res.data.bookings || res.data.data?.bookings || res.data.data || [];
 
       const now = new Date();
       const upcomingArr = [];
@@ -89,52 +79,34 @@ const AttendeeDashboard = () => {
 
   useEffect(() => {
     loadBookings();
+    // load my reviews & reports once
+    loadMyReviews();
+    loadMyReports();
   }, []);
 
-  // ===========================================
-  // LOAD MY REVIEWS
-  // Called only when user opens "My Reviews" tab
-  // ===========================================
+  // Load my reviews
   const loadMyReviews = async () => {
     try {
-      const res = await axiosAuth.get("reviews/"); // GET /api/reviews/
+      const res = await axiosAuth.get("reviews/");
       setMyReviews(res.data.data || res.data.reviews || res.data || []);
     } catch (err) {
       console.error("Failed loading reviews", err);
-      setMyReviews([]); // reset on error
+      setMyReviews([]);
     }
   };
 
-  // ===========================================
-  // LOAD MY REPORTS
-  // Note: backend must expose GET /api/reports/user or similar for this to work
-  // If you don't have it, this will fail gracefully and leave myReports empty
-  // ===========================================
+  // Load my reports
   const loadMyReports = async () => {
     try {
-      const res = await axiosAuth.get("reports/user"); // GET /api/reports/user
+      const res = await axiosAuth.get("reports/user");
       setMyReports(res.data.data || res.data.reports || res.data || []);
     } catch (err) {
       console.error("Failed loading reports", err);
-      setMyReports([]); // reset on error
+      setMyReports([]);
     }
   };
 
-  // ===========================================
-  // WHEN USER SWITCHES TABS: fetch reviews/reports ONCE
-  // ===========================================
-  useEffect(() => {
-    if (selected === "myreviews") {
-      loadMyReviews();
-    }
-    if (selected === "myreports") {
-      loadMyReports();
-    }
-  }, [selected]);
-
-  // ===========================================
-  // UPGRADE ROLE
-  // ===========================================
+  // Role upgrade
   const handleRoleUpgrade = async () => {
     try {
       await axiosAuth.post("users/request");
@@ -145,26 +117,104 @@ const AttendeeDashboard = () => {
     }
   };
 
-  // ===========================================
-  // OPEN MODALS
-  // ===========================================
-  const openReviewModal = (b) => {
-    setSelectedBooking(b);
+  // Open review modal: prefill if user already reviewed that event
+  const openReviewModal = (booking) => {
+    setSelectedBooking(booking);
+    // find existing review (from myReviews) for the event
+    const existing = myReviews.find((r) => r.eventId === booking.event.id || r.event?.id === booking.event.id);
+    if (existing) {
+      setEditingReviewId(existing.id);
+      setReviewRating(Number(existing.rating) || 5);
+      setReviewText(existing.reviewText || "");
+    } else {
+      setEditingReviewId(null);
+      setReviewRating(5);
+      setReviewText("");
+    }
     setShowReviewModal(true);
   };
 
-  const openReportModal = (b) => {
-    setSelectedBooking(b);
+  // Open report modal: prefill if user already reported
+  const openReportModal = (booking) => {
+    setSelectedBooking(booking);
+    const existing = myReports.find((r) => r.eventId === booking.event.id || r.event?.id === booking.event.id);
+    if (existing) {
+      setEditingReportId(existing.id);
+      setReportReason(existing.reason || "");
+    } else {
+      setEditingReportId(null);
+      setReportReason("");
+    }
     setShowReportModal(true);
   };
 
-  // ===========================================
-  // BOOKING TABLE
-  // ===========================================
+  // Helper: check if already reviewed
+  const hasReviewed = (eventId) => {
+    return myReviews.some((r) => r.eventId === eventId || r.event?.id === eventId);
+  };
+
+  // Helper: check if already reported
+  const hasReported = (eventId) => {
+    return myReports.some((r) => r.eventId === eventId || r.event?.id === eventId);
+  };
+
+  // Submit review (upsert)
+  const submitReview = async () => {
+    try {
+      if (!selectedBooking) return;
+      const payload = {
+        eventId: selectedBooking.event.id,
+        rating: Number(reviewRating),
+        reviewText,
+      };
+
+      await axiosAuth.post("reviews/", payload); // backend does upsert
+
+      // reload both myReviews and bookings to reflect state
+      await loadMyReviews();
+      await loadBookings();
+
+      alert("Review submitted/updated.");
+      setShowReviewModal(false);
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.message || "Failed to submit review");
+    }
+  };
+
+  // Delete review
+  const deleteReview = async (reviewId) => {
+    if (!confirm("Delete this review?")) return;
+    try {
+      await axiosAuth.delete(`reviews/${reviewId}`);
+      await loadMyReviews();
+      alert("Review deleted.");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete review");
+    }
+  };
+
+  // Submit report (upsert)
+  const submitReport = async () => {
+    try {
+      if (!selectedBooking) return;
+      const eventId = selectedBooking.event.id;
+      await axiosAuth.post(`reports/event/${eventId}`, { reason: reportReason });
+
+      await loadMyReports();
+      alert("Report submitted/updated.");
+      setShowReportModal(false);
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.message || "Failed to submit report");
+    }
+  };
+
+  // Booking table component
   const BookingTable = ({ title, data, reloadBookings }) => (
     <div>
       <h3>{title}</h3>
-
       <table className="table table-bordered mt-3">
         <thead>
           <tr>
@@ -182,7 +232,6 @@ const AttendeeDashboard = () => {
             <th>Action</th>
           </tr>
         </thead>
-
         <tbody>
           {data.length === 0 ? (
             <tr><td colSpan="12" className="text-center">No records</td></tr>
@@ -199,13 +248,8 @@ const AttendeeDashboard = () => {
                 <td>{b.quantity}</td>
                 <td>₹{b.totalPrice}</td>
                 <td>{new Date(b.createdAt).toLocaleString()}</td>
-
-                <td className={b.status === "cancelled" ? "text-danger" : "text-success"}>
-                  {b.status}
-                </td>
-
+                <td className={b.status === "cancelled" ? "text-danger" : "text-success"}>{b.status}</td>
                 <td>
-                  {/* CANCEL ONLY FOR UPCOMING */}
                   {title === "Upcoming Events" && (
                     <button
                       className="btn btn-sm btn-danger me-2"
@@ -224,20 +268,24 @@ const AttendeeDashboard = () => {
                     </button>
                   )}
 
-                  {/* REVIEW / REPORT FOR PAST EVENTS */}
                   {title === "Past Events" && (
                     <>
                       <button
                         className="btn btn-sm btn-primary me-2"
                         onClick={() => openReviewModal(b)}
+                        disabled={hasReviewed(b.event.id)}
+                        title={hasReviewed(b.event.id) ? "You already reviewed this event" : "Leave/Edit review"}
                       >
-                        Review
+                        {hasReviewed(b.event.id) ? "Reviewed" : "Review"}
                       </button>
+
                       <button
                         className="btn btn-sm btn-warning"
                         onClick={() => openReportModal(b)}
+                        disabled={hasReported(b.event.id)}
+                        title={hasReported(b.event.id) ? "You already reported this event" : "Report event"}
                       >
-                        Report
+                        {hasReported(b.event.id) ? "Reported" : "Report"}
                       </button>
                     </>
                   )}
@@ -250,10 +298,7 @@ const AttendeeDashboard = () => {
     </div>
   );
 
-  // ===========================================
-  // RENDER TAB CONTENT
-  // (No fetch calls here - fetches are handled via useEffect)
-  // ===========================================
+  // Render main content
   const renderContent = () => {
     if (loading) return <p>Loading...</p>;
     if (error) return <p className="text-danger">{error}</p>;
@@ -277,9 +322,9 @@ const AttendeeDashboard = () => {
                   <th>Rating</th>
                   <th>Review</th>
                   <th>Date</th>
+                  <th>Action</th>
                 </tr>
               </thead>
-
               <tbody>
                 {myReviews.map((r, i) => (
                   <tr key={r.id}>
@@ -288,6 +333,25 @@ const AttendeeDashboard = () => {
                     <td>{r.rating}</td>
                     <td>{r.reviewText}</td>
                     <td>{new Date(r.createdAt).toLocaleString()}</td>
+                    <td>
+                      <button
+                        className="btn btn-sm btn-outline-primary me-2"
+                        onClick={() => {
+                          // open modal to edit this review
+                          setSelectedBooking({ event: r.event });
+                          setEditingReviewId(r.id);
+                          setReviewRating(r.rating);
+                          setReviewText(r.reviewText || "");
+                          setShowReviewModal(true);
+                        }}
+                      >
+                        Edit
+                      </button>
+
+                      <button className="btn btn-sm btn-danger" onClick={() => deleteReview(r.id)}>
+                        Delete
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -314,7 +378,6 @@ const AttendeeDashboard = () => {
                   <th>Date</th>
                 </tr>
               </thead>
-
               <tbody>
                 {myReports.map((r, i) => (
                   <tr key={r.id}>
@@ -333,155 +396,75 @@ const AttendeeDashboard = () => {
     }
   };
 
-  // ===========================================
-  // RENDER
-  // ===========================================
   return (
     <div className="d-flex" style={{ width: "100%" }}>
-
-      {/* SIDEBAR */}
-      <div
-        style={{
-          width: "15%",
-          minHeight: "100vh",
-          background: "#f7f7f7",
-          padding: "1rem",
-          borderRight: "1px solid #ddd",
-        }}
-      >
+      {/* Sidebar */}
+      <div style={{ width: "15%", minHeight: "100vh", background: "#f7f7f7", padding: "1rem", borderRight: "1px solid #ddd" }}>
         <h4>Attendee Menu</h4>
         <p><strong>Welcome: {attendee?.name}</strong></p>
         <p style={{ marginTop: "-10px", color: "#666" }}>{attendee?.email}</p>
 
-        <button className="btn btn-warning w-100 mt-3" onClick={handleRoleUpgrade}>
-          Upgrade to Organizer
-        </button>
+        <button className="btn btn-warning w-100 mt-3" onClick={handleRoleUpgrade}>Upgrade to Organizer</button>
 
         <ul className="list-group mt-4">
-          <li className={`list-group-item ${selected === "upcoming" ? "active" : ""}`} onClick={() => setSelected("upcoming")}>
-            Upcoming
-          </li>
-
-          <li className={`list-group-item ${selected === "past" ? "active" : ""}`} onClick={() => setSelected("past")}>
-            Past
-          </li>
-
-          <li className={`list-group-item ${selected === "cancelled" ? "active" : ""}`} onClick={() => setSelected("cancelled")}>
-            Cancelled
-          </li>
-
-          <li className={`list-group-item ${selected === "myreviews" ? "active" : ""}`} onClick={() => setSelected("myreviews")}>
-            My Reviews
-          </li>
-
-          <li className={`list-group-item ${selected === "myreports" ? "active" : ""}`} onClick={() => setSelected("myreports")}>
-            My Reports
-          </li>
+          <li className={`list-group-item ${selected === "upcoming" ? "active" : ""}`} onClick={() => setSelected("upcoming")}>Upcoming</li>
+          <li className={`list-group-item ${selected === "past" ? "active" : ""}`} onClick={() => setSelected("past")}>Past</li>
+          <li className={`list-group-item ${selected === "cancelled" ? "active" : ""}`} onClick={() => setSelected("cancelled")}>Cancelled</li>
+          <li className={`list-group-item ${selected === "myreviews" ? "active" : ""}`} onClick={() => setSelected("myreviews")}>My Reviews</li>
+          <li className={`list-group-item ${selected === "myreports" ? "active" : ""}`} onClick={() => setSelected("myreports")}>My Reports</li>
         </ul>
       </div>
 
-      {/* MAIN CONTENT */}
+      {/* Main */}
       <div style={{ width: "85%", padding: "2rem" }}>
+        <h2>Attendee Dashboard</h2>
+        <button className="btn btn-info mb-3" onClick={() => { loadBookings(); loadMyReviews(); loadMyReports(); }}>Reload Bookings</button>
         {renderContent()}
       </div>
 
-      {/* ===========================================
-          REVIEW MODAL
-          (submit calls loadMyReviews() once on success)
-      =========================================== */}
+      {/* Review Modal */}
       {showReviewModal && selectedBooking && (
-        <div className="modal-backdrop d-flex justify-content-center align-items-center"
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)" }}>
+        <div className="modal-backdrop d-flex justify-content-center align-items-center" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)" }}>
           <div className="card p-4" style={{ minWidth: "400px" }}>
             <h4>Review: {selectedBooking.event.title}</h4>
 
             <label className="mt-3">Rating (1–5)</label>
-            <input id="reviewRating" type="number" min="1" max="5" className="form-control" />
+            <input
+              type="number"
+              min="1"
+              max="5"
+              className="form-control"
+              value={reviewRating}
+              onChange={(e) => setReviewRating(Number(e.target.value))}
+            />
 
             <label className="mt-3">Review</label>
-            <textarea id="reviewText" className="form-control" />
+            <textarea className="form-control" value={reviewText} onChange={(e) => setReviewText(e.target.value)} />
 
             <div className="mt-3 d-flex justify-content-end gap-2">
               <button className="btn btn-secondary" onClick={() => setShowReviewModal(false)}>Close</button>
-
-              <button
-                className="btn btn-primary"
-                onClick={async () => {
-                  try {
-                    const rating = Number(document.getElementById("reviewRating").value);
-                    const reviewText = document.getElementById("reviewText").value;
-
-                    // POST to /api/reviews/
-                    await axiosAuth.post("reviews/", {
-                      eventId: selectedBooking.event.id,
-                      rating,
-                      reviewText,
-                    });
-
-                    // reload reviews once if viewing that tab
-                    if (selected === "myreviews") await loadMyReviews();
-
-                    // Optionally reload bookings (if your UI depends on it)
-                    await loadBookings();
-
-                    alert("Review submitted!");
-                    setShowReviewModal(false);
-                  } catch (err) {
-                    console.error(err);
-                    alert(err.response?.data?.message || "Failed to submit review");
-                  }
-                }}
-              >
-                Submit
-              </button>
+              <button className="btn btn-primary" onClick={submitReview}>Submit</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ===========================================
-          REPORT MODAL
-          (submit calls loadMyReports() once on success)
-      =========================================== */}
+      {/* Report Modal */}
       {showReportModal && selectedBooking && (
-        <div className="modal-backdrop d-flex justify-content-center align-items-center"
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)" }}>
+        <div className="modal-backdrop d-flex justify-content-center align-items-center" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)" }}>
           <div className="card p-4" style={{ minWidth: "400px" }}>
             <h4>Report: {selectedBooking.event.title}</h4>
 
             <label className="mt-3">Reason</label>
-            <textarea id="reportReason" className="form-control" />
+            <textarea className="form-control" value={reportReason} onChange={(e) => setReportReason(e.target.value)} />
 
             <div className="mt-3 d-flex justify-content-end gap-2">
               <button className="btn btn-secondary" onClick={() => setShowReportModal(false)}>Close</button>
-
-              <button
-                className="btn btn-warning"
-                onClick={async () => {
-                  try {
-                    const reason = document.getElementById("reportReason").value;
-
-                    // POST to /api/reports/event/:eventId
-                    await axiosAuth.post(`reports/event/${selectedBooking.event.id}`, { reason });
-
-                    // reload my reports once if viewing that tab
-                    if (selected === "myreports") await loadMyReports();
-
-                    alert("Report submitted!");
-                    setShowReportModal(false);
-                  } catch (err) {
-                    console.error(err);
-                    alert(err.response?.data?.message || "Failed to submit report");
-                  }
-                }}
-              >
-                Submit Report
-              </button>
+              <button className="btn btn-warning" onClick={submitReport}>Submit Report</button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 };

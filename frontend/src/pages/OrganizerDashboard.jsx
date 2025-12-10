@@ -19,11 +19,11 @@ const OrganizerDashboard = () => {
     const [showTicketType, setShowTicketType] = useState(false);
     const [eventForTicketType, setEventForTicketType] = useState(null);
 
-    // ============================================
-    // Load Organizer From Local Storage
-    // ============================================
+    // =========================
+    // Organizer from localStorage
+    // =========================
     const [organizer, setOrganizer] = useState(null);
-    
+
     useEffect(() => {
         const raw = localStorage.getItem("user");
         if (raw) {
@@ -34,6 +34,14 @@ const OrganizerDashboard = () => {
             }
         }
     }, []);
+
+    // =========================
+    // Reviews modal state
+    // =========================
+    const [showReviewsModal, setShowReviewsModal] = useState(false);
+    const [selectedEventReviews, setSelectedEventReviews] = useState([]);
+    const [reviewsLoading, setReviewsLoading] = useState(false);
+    const [reviewsError, setReviewsError] = useState("");
 
     const axiosAuth = axios.create({
         baseURL: BASE_URL.replace(/\/+$/, ""),
@@ -69,6 +77,30 @@ const OrganizerDashboard = () => {
                 ev.id === updatedEvent.id ? { ...ev, ...updatedEvent } : ev
             )
         );
+    };
+
+    // =========================
+    // Load reviews for a particular event
+    // GET /api/reviews/event/:eventId
+    // =========================
+    const loadEventReviews = async (eventId) => {
+        try {
+            setSelectedEventReviews([]);
+            setReviewsError("");
+            setReviewsLoading(true);
+
+            // route requires JWT; organizer is authenticated
+            const res = await axiosAuth.get(`/reviews/event/${eventId}`);
+            const reviews = res.data.data || res.data.reviews || [];
+            setSelectedEventReviews(Array.isArray(reviews) ? reviews : []);
+            setShowReviewsModal(true);
+        } catch (err) {
+            console.error("Failed to load reviews", err);
+            setReviewsError("Failed to load reviews for this event");
+            setShowReviewsModal(true);
+        } finally {
+            setReviewsLoading(false);
+        }
     };
 
     return (
@@ -177,6 +209,14 @@ const OrganizerDashboard = () => {
                                     >
                                         Add Ticket Type
                                     </button>
+
+                                    {/* NEW: View Reviews button */}
+                                    <button
+                                        className="btn btn-outline-secondary btn-sm"
+                                        onClick={() => loadEventReviews(ev.id)}
+                                    >
+                                        View Reviews
+                                    </button>
                                 </td>
                             </tr>
                         );
@@ -274,6 +314,57 @@ const OrganizerDashboard = () => {
                         setShowTicketType(false);
                     }}
                 />
+            )}
+
+            {/* ===========================================
+                REVIEWS MODAL
+            =========================================== */}
+            {showReviewsModal && (
+                <div className="modal-backdrop d-flex justify-content-center align-items-center"
+                     style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)" }}>
+                    <div className="card p-3" style={{ minWidth: 600, maxHeight: "80vh", overflowY: "auto" }}>
+                        <div className="d-flex justify-content-between align-items-center">
+                            <h5>Event Reviews</h5>
+                            <button className="btn-close" onClick={() => setShowReviewsModal(false)} />
+                        </div>
+
+                        {reviewsLoading && <p>Loading reviews…</p>}
+                        {reviewsError && <p className="text-danger">{reviewsError}</p>}
+
+                        {!reviewsLoading && !reviewsError && selectedEventReviews.length === 0 && (
+                            <p className="mt-3">No reviews yet for this event.</p>
+                        )}
+
+                        {!reviewsLoading && selectedEventReviews.length > 0 && (
+                            <table className="table table-bordered mt-3 mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>User</th>
+                                        <th>Rating</th>
+                                        <th>Review</th>
+                                        <th>Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {selectedEventReviews.map((r, i) => (
+                                        <tr key={r.id}>
+                                            <td>{i + 1}</td>
+                                            <td>{r.user?.name || r.user?.email || "User"}</td>
+                                            <td>{r.rating}</td>
+                                            <td>{r.reviewText || "—"}</td>
+                                            <td>{new Date(r.createdAt).toLocaleString()}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+
+                        <div className="mt-3 text-end">
+                            <button className="btn btn-secondary" onClick={() => setShowReviewsModal(false)}>Close</button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

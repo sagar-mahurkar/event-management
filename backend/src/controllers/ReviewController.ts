@@ -16,6 +16,18 @@ export class ReviewController {
         }
     };
 
+    // ---------------- GET USER REVIEW FOR EVENT ----------------
+    getUserEventReview = async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const userId = req.user.id;
+            const eventId = Number(req.params.eventId);
+            const review = await this.reviewService.getUserReviewForEvent(userId, eventId);
+            res.json({ success: true, data: review });
+        } catch (error) {
+            next(error);
+        }
+    };
+
     // ---------------- LEAVE OR UPDATE REVIEW ----------------
     leaveReview = async (req: Request, res: Response, next: NextFunction) => {
         try {
@@ -40,7 +52,7 @@ export class ReviewController {
         }
     };
 
-    // ---------------- GET EVENT REVIEWS ----------------
+    // ---------------- GET EVENT REVIEWS (PUBLIC) ----------------
     getEventReviews = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const eventId = Number(req.params.eventId);
