@@ -18,6 +18,22 @@ const OrganizerDashboard = () => {
     const [showTicketType, setShowTicketType] = useState(false);
     const [eventForTicketType, setEventForTicketType] = useState(null);
 
+    // ============================================
+    // Load Organizer From Local Storage
+    // ============================================
+    const [organizer, setOrganizer] = useState(null);
+
+    useEffect(() => {
+        const raw = localStorage.getItem("user");
+        if (raw) {
+            try {
+                setOrganizer(JSON.parse(raw));
+            } catch (e) {
+                console.error("Invalid user JSON");
+            }
+        }
+    }, []);
+
     const axiosAuth = axios.create({
         baseURL: BASE_URL,
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
@@ -45,16 +61,32 @@ const OrganizerDashboard = () => {
     useEffect(() => { loadMyEvents(); }, []);
 
     const handleSave = (updatedEvent) => {
-        setEvents((prev) => prev.map((ev) => ev.id === updatedEvent.id ? { ...ev, ...updatedEvent } : ev));
+        setEvents((prev) =>
+            prev.map((ev) =>
+                ev.id === updatedEvent.id ? { ...ev, ...updatedEvent } : ev
+            )
+        );
     };
 
     return (
         <div style={{ padding: "2rem" }}>
             <h2>Organizer Dashboard</h2>
 
+            {/* ================================
+                Organizer Name + Email
+            ================================= */}
+            <p>
+                <strong>Welcome:</strong> {organizer?.name || "Organizer"}
+            </p>
+            <p style={{ marginTop: "-10px", color: "#666" }}>
+                {organizer?.email}
+            </p>
+
             <div className="d-flex justify-content-between mt-3">
                 <h4>Your Events</h4>
-                <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Create New Event</button>
+                <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+                    + Create New Event
+                </button>
             </div>
 
             {loading && <p>Loading...</p>}
@@ -79,7 +111,10 @@ const OrganizerDashboard = () => {
                 <tbody>
                     {events.map((ev) => {
                         const ticketTypes = ev.ticketTypes ?? [];
-                        const allocated = ticketTypes.reduce((sum, t) => sum + Number(t.limit || 0), 0);
+                        const allocated = ticketTypes.reduce(
+                            (sum, t) => sum + Number(t.limit || 0),
+                            0
+                        );
 
                         return (
                             <tr key={ev.id}>
@@ -91,21 +126,50 @@ const OrganizerDashboard = () => {
                                 <td>{ev.capacity}</td>
 
                                 <td>
-                                    {ticketTypes.length === 0 ? <span className="text-muted">None</span> :
-                                        ticketTypes.map((t) => <div key={t.id}>{String(t.type).toUpperCase()} ({t.limit})</div>)
-                                    }
+                                    {ticketTypes.length === 0 ? (
+                                        <span className="text-muted">None</span>
+                                    ) : (
+                                        ticketTypes.map((t) => (
+                                            <div key={t.id}>
+                                                {String(t.type).toUpperCase()} ({t.limit})
+                                            </div>
+                                        ))
+                                    )}
                                 </td>
 
                                 <td>{allocated} / {ev.capacity}</td>
 
                                 <td>
                                     {(ev.bookings ?? []).length}
-                                    <button className="btn btn-sm btn-outline-info ms-2" data-bs-toggle="collapse" data-bs-target={`#attendees-${ev.id}`}>View</button>
+                                    <button
+                                        className="btn btn-sm btn-outline-info ms-2"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target={`#attendees-${ev.id}`}
+                                    >
+                                        View
+                                    </button>
                                 </td>
 
                                 <td className="d-flex gap-2">
-                                    <button className="btn btn-primary btn-sm" onClick={() => { setSelectedEvent(ev); setShowModal(true); }}>Edit</button>
-                                    <button className="btn btn-success btn-sm" onClick={() => { setEventForTicketType(ev); setShowTicketType(true); }}>Add Ticket Type</button>
+                                    <button
+                                        className="btn btn-primary btn-sm"
+                                        onClick={() => {
+                                            setSelectedEvent(ev);
+                                            setShowModal(true);
+                                        }}
+                                    >
+                                        Edit
+                                    </button>
+
+                                    <button
+                                        className="btn btn-success btn-sm"
+                                        onClick={() => {
+                                            setEventForTicketType(ev);
+                                            setShowTicketType(true);
+                                        }}
+                                    >
+                                        Add Ticket Type
+                                    </button>
                                 </td>
                             </tr>
                         );
@@ -127,7 +191,9 @@ const OrganizerDashboard = () => {
                         </thead>
                         <tbody>
                             {(ev.bookings ?? []).length === 0 ? (
-                                <tr><td colSpan="4">No attendees yet</td></tr>
+                                <tr>
+                                    <td colSpan="4">No attendees yet</td>
+                                </tr>
                             ) : (
                                 (ev.bookings ?? []).map((b) => (
                                     <tr key={b.id}>
@@ -143,12 +209,46 @@ const OrganizerDashboard = () => {
                 </div>
             ))}
 
-            {showModal && selectedEvent && <EditEventModal show={showModal} event={selectedEvent} onClose={() => setShowModal(false)} onSave={(updated) => { handleSave(updated); setShowModal(false); }} />}
-            {showCreate && <CreateEventModal show={showCreate} onClose={() => setShowCreate(false)} onCreate={handleCreate} />}
-            {showTicketType && eventForTicketType && <AddTicketTypeModal show={showTicketType} event={eventForTicketType} onClose={() => setShowTicketType(false)} onSuccess={(newType) => {
-                setEvents((prev) => prev.map((ev) => ev.id === eventForTicketType.id ? { ...ev, ticketTypes: [...(ev.ticketTypes ?? []), newType] } : ev));
-                setShowTicketType(false);
-            }} />}
+            {showModal && selectedEvent && (
+                <EditEventModal
+                    show={showModal}
+                    event={selectedEvent}
+                    onClose={() => setShowModal(false)}
+                    onSave={(updated) => {
+                        handleSave(updated);
+                        setShowModal(false);
+                    }}
+                />
+            )}
+
+            {showCreate && (
+                <CreateEventModal
+                    show={showCreate}
+                    onClose={() => setShowCreate(false)}
+                    onCreate={handleCreate}
+                />
+            )}
+
+            {showTicketType && eventForTicketType && (
+                <AddTicketTypeModal
+                    show={showTicketType}
+                    event={eventForTicketType}
+                    onClose={() => setShowTicketType(false)}
+                    onSuccess={(newType) => {
+                        setEvents((prev) =>
+                            prev.map((ev) =>
+                                ev.id === eventForTicketType.id
+                                    ? {
+                                          ...ev,
+                                          ticketTypes: [...(ev.ticketTypes ?? []), newType],
+                                      }
+                                    : ev
+                            )
+                        );
+                        setShowTicketType(false);
+                    }}
+                />
+            )}
         </div>
     );
 };

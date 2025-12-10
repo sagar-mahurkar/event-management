@@ -4,6 +4,22 @@ import axios from "axios";
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 
 const AttendeeDashboard = () => {
+  // ================================
+  // Load Attendee From LocalStorage
+  // ================================
+  const [attendee, setAttendee] = useState(null);
+
+  useEffect(() => {
+    const raw = localStorage.getItem("user");
+    if (raw) {
+      try {
+        setAttendee(JSON.parse(raw));
+      } catch (e) {
+        console.error("❌ Invalid user JSON in localStorage");
+      }
+    }
+  }, []);
+
   const [selected, setSelected] = useState("upcoming");
   const [upcoming, setUpcoming] = useState([]);
   const [past, setPast] = useState([]);
@@ -11,28 +27,28 @@ const AttendeeDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ---- FIX BASE URL (remove trailing slash) ----
-  const usersBase = `${(BASE_URL || "").replace(/\/+$/, "")}/users`;
-
   const axiosAuth = axios.create({
-    baseURL: usersBase,
+    baseURL: `${BASE_URL.replace(/\/+$/, "")}/users`,
     headers: {
       Authorization: `Bearer ${localStorage.getItem("token")}`,
     },
   });
 
-  // ---- LOAD BOOKINGS ----
+  // ================================
+  // Load Bookings
+  // ================================
   const loadBookings = async () => {
     try {
       setLoading(true);
       setError("");
 
-      console.log("Fetching bookings from:", usersBase + "/bookings");
-
       const res = await axiosAuth.get("/bookings");
-      console.log("Bookings response:", res.data);
 
-      const list = res.data.bookings || res.data.data?.bookings || res.data.data || [];
+      const list =
+        res.data.bookings ||
+        res.data.data?.bookings ||
+        res.data.data ||
+        [];
 
       const now = new Date();
       const upcomingArr = [];
@@ -65,37 +81,26 @@ const AttendeeDashboard = () => {
     loadBookings();
   }, []);
 
-  // ---- ROLE UPGRADE REQUEST ----
+  // ================================
+  // Upgrade Role Request
+  // ================================
   const handleRoleUpgrade = async () => {
-    const token = localStorage.getItem("token");
-    console.log("Attempting role upgrade...");
-    console.log("Token:", token);
-    console.log("Request URL:", usersBase + "/request");
-
-    if (!token) {
-      alert("No token found! Please login again.");
-      return;
-    }
-
-    if (!confirm("Do you want to request Organizer role?")) return;
-
     try {
-      const res = await axiosAuth.post("/request", {}, {
-        headers: { "Content-Type": "application/json" },
-      });
-
-      console.log("Role upgrade response:", res);
+      await axiosAuth.post("/request");
       alert("Organizer role request submitted successfully!");
     } catch (err) {
-      console.error("Role upgrade error:", err.response || err);
-      alert(`Failed to submit request: ${err.response?.data?.message || err.message}`);
+      console.error(err);
+      alert(err.response?.data?.message || "Failed to submit request");
     }
   };
 
-  // ---- TABLE COMPONENT ----
-  const BookingTable = ({ title, data }) => (
+  // ================================
+  // Booking Table Component
+  // ================================
+  const BookingTable = ({ title, data, reloadBookings }) => (
     <div>
       <h3>{title}</h3>
+
       <table className="table table-bordered mt-3">
         <thead>
           <tr>
@@ -104,25 +109,58 @@ const AttendeeDashboard = () => {
             <th>Date/Time</th>
             <th>Location</th>
             <th>Category</th>
+            <th>Ticket Type</th>
+            <th>Rate</th>
+            <th>Qty</th>
+            <th>Total</th>
             <th>Booked At</th>
             <th>Status</th>
+            <th>Action</th>
           </tr>
         </thead>
+
         <tbody>
           {data.length === 0 ? (
-            <tr>
-              <td colSpan="7" className="text-center">No records found</td>
-            </tr>
+            <tr><td colSpan="12" className="text-center">No records found</td></tr>
           ) : (
             data.map((b, i) => (
               <tr key={b.id}>
                 <td>{i + 1}</td>
                 <td>{b.event?.title}</td>
-                <td>{b.event?.dateTime ? new Date(b.event.dateTime).toLocaleString() : "-"}</td>
+                <td>{new Date(b.event?.dateTime).toLocaleString()}</td>
                 <td>{b.event?.location}</td>
                 <td>{b.event?.category}</td>
-                <td>{b.createdAt ? new Date(b.createdAt).toLocaleString() : "-"}</td>
-                <td className={b.status === "cancelled" ? "text-danger" : "text-success"}>{b.status}</td>
+                <td>{b.ticketType}</td>
+                <td>₹{b.rate}</td>
+                <td>{b.quantity}</td>
+                <td>₹{b.quantity * b.rate}</td>
+                <td>{new Date(b.createdAt).toLocaleString()}</td>
+                <td className={b.status === "cancelled" ? "text-danger" : "text-success"}>
+                  {b.status}
+                </td>
+
+                <td>
+                  {b.status !== "cancelled" ? (
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={async () => {
+                        if (!confirm("Cancel this booking?")) return;
+
+                        try {
+                          await axios.put(
+                            `${BASE_URL.replace(/\/+$/, "")}/users/bookings/${b.id}/cancel`,
+                            {},
+                            { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+                          );
+                          alert("Booking cancelled.");
+                          reloadBookings();
+                        } catch (err) {
+                          alert("Failed to cancel booking");
+                        }
+                      }}
+                    >Cancel</button>
+                  ) : "-"}
+                </td>
               </tr>
             ))
           )}
@@ -132,18 +170,18 @@ const AttendeeDashboard = () => {
   );
 
   const renderContent = () => {
-    if (loading) return <p>Loading…</p>;
+    if (loading) return <p>Loading...</p>;
     if (error) return <p className="text-danger">{error}</p>;
 
-    if (selected === "upcoming") return <BookingTable title="Upcoming Events" data={upcoming} />;
-    if (selected === "past") return <BookingTable title="Past Events" data={past} />;
-    if (selected === "cancelled") return <BookingTable title="Cancelled Bookings" data={cancelled} />;
+    if (selected === "upcoming") return <BookingTable title="Upcoming Events" data={upcoming} reloadBookings={loadBookings} />;
+    if (selected === "past") return <BookingTable title="Past Events" data={past} reloadBookings={loadBookings} />;
+    if (selected === "cancelled") return <BookingTable title="Cancelled Bookings" data={cancelled} reloadBookings={loadBookings} />;
   };
 
   return (
     <div className="d-flex" style={{ width: "100%" }}>
 
-      {/* SIDEBAR */}
+      {/* Sidebar */}
       <div
         style={{
           width: "15%",
@@ -155,30 +193,46 @@ const AttendeeDashboard = () => {
       >
         <h4>Attendee Menu</h4>
 
+        {/* Show attendee name in sidebar ONLY */}
+        <p><strong>Welcome: {attendee?.name}</strong></p>
+        <p style={{ marginTop: "-10px", color: "#666" }}>{attendee?.email}</p>
+
         <button className="btn btn-warning w-100 mt-3" onClick={handleRoleUpgrade}>
           Upgrade to Organizer
         </button>
 
         <ul className="list-group mt-4">
-          <li className={`list-group-item d-flex justify-content-between align-items-center ${selected === "upcoming" ? "active" : ""}`}
-              style={{ cursor: "pointer" }} onClick={() => setSelected("upcoming")}>
+          <li
+            className={`list-group-item d-flex justify-content-between ${selected === "upcoming" ? "active" : ""}`}
+            onClick={() => setSelected("upcoming")}
+          >
             Upcoming <span className="badge bg-primary rounded-pill">{upcoming.length}</span>
           </li>
-          <li className={`list-group-item d-flex justify-content-between align-items-center ${selected === "past" ? "active" : ""}`}
-              style={{ cursor: "pointer" }} onClick={() => setSelected("past")}>
+
+          <li
+            className={`list-group-item d-flex justify-content-between ${selected === "past" ? "active" : ""}`}
+            onClick={() => setSelected("past")}
+          >
             Past <span className="badge bg-secondary rounded-pill">{past.length}</span>
           </li>
-          <li className={`list-group-item d-flex justify-content-between align-items-center ${selected === "cancelled" ? "active" : ""}`}
-              style={{ cursor: "pointer" }} onClick={() => setSelected("cancelled")}>
+
+          <li
+            className={`list-group-item d-flex justify-content-between ${selected === "cancelled" ? "active" : ""}`}
+            onClick={() => setSelected("cancelled")}
+          >
             Cancelled <span className="badge bg-danger rounded-pill">{cancelled.length}</span>
           </li>
         </ul>
       </div>
 
-      {/* MAIN CONTENT */}
+      {/* Main Content */}
       <div style={{ width: "85%", padding: "2rem" }}>
         <h2>Attendee Dashboard</h2>
-        <button className="btn btn-info mb-3" onClick={loadBookings}>Reload Bookings</button>
+
+        <button className="btn btn-info mb-3" onClick={loadBookings}>
+          Reload Bookings
+        </button>
+
         {renderContent()}
       </div>
     </div>

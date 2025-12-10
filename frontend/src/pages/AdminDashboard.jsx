@@ -18,6 +18,23 @@ const AdminDashboard = () => {
     const [editUserData, setEditUserData] = useState(null);
     const [editEventData, setEditEventData] = useState(null);
 
+    // ============================================
+    // LOAD LOGGED-IN ADMIN NAME
+    // ============================================
+    const [admin, setAdmin] = useState(null);
+
+    useEffect(() => {
+        const raw = localStorage.getItem("user");
+        if (raw) {
+            try {
+                const parsed = JSON.parse(raw);
+                setAdmin(parsed);
+            } catch (e) {
+                console.error("Invalid user JSON in localStorage");
+            }
+        }
+    }, []);
+
     const axiosAuth = axios.create({
         baseURL: BASE_URL,
         headers: {
@@ -72,7 +89,7 @@ const AdminDashboard = () => {
     }, [selected]);
 
     // ============================================================
-    // ACTION HANDLERS — ORGANIZERS
+    // ORGANIZER ACTION HANDLERS
     // ============================================================
     const approveOrganizer = async (id) => {
         if (!confirm("Approve this organizer request?")) return;
@@ -97,7 +114,7 @@ const AdminDashboard = () => {
     };
 
     // ============================================================
-    // ACTION HANDLERS — USERS
+    // USER ACTION HANDLERS
     // ============================================================
     const deleteUser = async (id) => {
         if (!confirm("Are you sure you want to delete this user?")) return;
@@ -121,7 +138,7 @@ const AdminDashboard = () => {
     };
 
     // ============================================================
-    // ACTION HANDLERS — EVENTS
+    // EVENT ACTION HANDLERS
     // ============================================================
     const deleteEvent = async (id) => {
         if (!confirm("Delete this event?")) return;
@@ -286,70 +303,6 @@ const AdminDashboard = () => {
     );
 
     // ============================================================
-    // MODALS
-    // ============================================================
-    const userModal = editUserData && (
-        <div className="modal show d-block" tabIndex="-1">
-            <div className="modal-dialog">
-                <div className="modal-content">
-
-                    <div className="modal-header">
-                        <h5 className="modal-title">Edit User</h5>
-                        <button className="btn-close" onClick={() => setEditUserData(null)}></button>
-                    </div>
-
-                    <div className="modal-body">
-                        <label>Name</label>
-                        <input
-                            type="text"
-                            className="form-control mb-2"
-                            value={editUserData.name}
-                            onChange={(e) => setEditUserData({ ...editUserData, name: e.target.value })}
-                        />
-
-                        <label>Email</label>
-                        <input
-                            type="email"
-                            className="form-control mb-2"
-                            value={editUserData.email}
-                            onChange={(e) => setEditUserData({ ...editUserData, email: e.target.value })}
-                        />
-
-                        <label>Role</label>
-                        <select
-                            className="form-control mb-2"
-                            value={editUserData.role}
-                            onChange={(e) => setEditUserData({ ...editUserData, role: e.target.value })}
-                        >
-                            <option>attendee</option>
-                            <option>organizer</option>
-                            <option>admin</option>
-                        </select>
-                    </div>
-
-                    <div className="modal-footer">
-                        <button className="btn btn-secondary" onClick={() => setEditUserData(null)}>Cancel</button>
-                        <button className="btn btn-primary" onClick={saveUserChanges}>Save Changes</button>
-                    </div>
-
-                </div>
-            </div>
-        </div>
-    );
-
-    const eventModal = editEventData && (
-        <EditEventModal
-            show={!!editEventData}
-            event={editEventData}
-            onClose={() => setEditEventData(null)}
-            onSave={(updatedEvent) => {
-                setEvents(events.map(ev => ev.id === updatedEvent.data.id ? updatedEvent.data : ev));
-            }}
-        />
-    );
-
-
-    // ============================================================
     // MAIN RENDER
     // ============================================================
     const renderContent = () => {
@@ -374,6 +327,13 @@ const AdminDashboard = () => {
                     padding: "1rem"
                 }}
             >
+                {/* ===================================== */}
+                {/* SHOW ADMIN NAME + EMAIL */}
+                {/* ===================================== */}
+                <h4>Welcome, {admin?.name || "Admin"}</h4>
+                <p style={{ fontSize: "0.9rem", color: "#555" }}>{admin?.email}</p>
+                <hr />
+
                 <h4>Admin Menu</h4>
 
                 <ul className="list-group mt-3">
@@ -408,9 +368,68 @@ const AdminDashboard = () => {
                 {renderContent()}
             </div>
 
-            {/* Modals */}
-            {userModal}
-            {eventModal}
+            {/* User Modal */}
+            {editUserData && (
+                <div className="modal show d-block" tabIndex="-1">
+                    <div className="modal-dialog">
+                        <div className="modal-content">
+
+                            <div className="modal-header">
+                                <h5 className="modal-title">Edit User</h5>
+                                <button className="btn-close" onClick={() => setEditUserData(null)}></button>
+                            </div>
+
+                            <div className="modal-body">
+                                <label>Name</label>
+                                <input
+                                    type="text"
+                                    className="form-control mb-2"
+                                    value={editUserData.name}
+                                    onChange={(e) => setEditUserData({ ...editUserData, name: e.target.value })}
+                                />
+
+                                <label>Email</label>
+                                <input
+                                    type="email"
+                                    className="form-control mb-2"
+                                    value={editUserData.email}
+                                    onChange={(e) => setEditUserData({ ...editUserData, email: e.target.value })}
+                                />
+
+                                <label>Role</label>
+                                <select
+                                    className="form-control mb-2"
+                                    value={editUserData.role}
+                                    onChange={(e) => setEditUserData({ ...editUserData, role: e.target.value })}
+                                >
+                                    <option>attendee</option>
+                                    <option>organizer</option>
+                                    <option>admin</option>
+                                </select>
+                            </div>
+
+                            <div className="modal-footer">
+                                <button className="btn btn-secondary" onClick={() => setEditUserData(null)}>Cancel</button>
+                                <button className="btn btn-primary" onClick={saveUserChanges}>Save Changes</button>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Event Modal */}
+            {editEventData && (
+                <EditEventModal
+                    show={true}
+                    event={editEventData}
+                    onClose={() => setEditEventData(null)}
+                    onSave={(updatedEvent) => {
+                        setEvents(events.map(ev => ev.id === updatedEvent.data.id ? updatedEvent.data : ev));
+                    }}
+                />
+            )}
+
         </div>
     );
 };

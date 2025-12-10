@@ -50,16 +50,59 @@ export class EventService {
             where: { id: Number(id) },
             relations: ["creator", "ticketTypes", "bookings"]
         });
+
         if (!event) throw new ErrorHandler(httpStatusCodes.NOT_FOUND, "Event not found");
-        return event;
+
+        // ---- Compute booked quantity per ticketType ----
+        const bookedMap = new Map<number, number>();
+        for (const booking of event.bookings) {
+            const ttId = booking.ticketTypeId;
+            bookedMap.set(ttId, (bookedMap.get(ttId) || 0) + booking.quantity);
+        }
+
+        // ---- Add availableQuantity to each ticketType ----
+        const ticketTypesWithAvailability = event.ticketTypes.map(tt => {
+            const booked = bookedMap.get(tt.id) || 0;
+            const available = Math.max(tt.limit - booked, 0);
+            return {
+                ...tt,
+                booked,
+                availableQuantity: available
+            };
+        });
+
+        // ---- Return event with ticketTypes including availableQuantity ----
+        return {
+            ...event,
+            ticketTypes: ticketTypesWithAvailability
+        };
     }
 
     // -------------------- ORGANIZER: GET MY EVENTS --------------------
     async getOrganizerEvents(organizerId: number) {
-        return eventRepo.find({
+        const events = await eventRepo.find({
             where: { createdBy: organizerId },
             relations: ["creator", "bookings", "bookings.user", "ticketTypes"],
             order: { dateTime: "ASC" }
+        });
+
+        // Compute availability per event for organizer dashboard
+        return events.map(event => {
+            const bookedMap = new Map<number, number>();
+            event.bookings.forEach(b => {
+                bookedMap.set(b.ticketTypeId, (bookedMap.get(b.ticketTypeId) || 0) + b.quantity);
+            });
+
+            const ticketTypesWithAvailability = event.ticketTypes.map(tt => ({
+                ...tt,
+                booked: bookedMap.get(tt.id) || 0,
+                availableQuantity: Math.max(tt.limit - (bookedMap.get(tt.id) || 0), 0)
+            }));
+
+            return {
+                ...event,
+                ticketTypes: ticketTypesWithAvailability
+            };
         });
     }
 

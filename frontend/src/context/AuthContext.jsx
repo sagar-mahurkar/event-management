@@ -7,23 +7,28 @@ export const AuthProvider = ({ children }) => {
 
     // Load user on refresh
     useEffect(() => {
-        const token = localStorage.getItem("token");
-        const role = localStorage.getItem("role");
+        const storedUser = localStorage.getItem("user");
 
-        if (token && role) {
-            setUser({ role }); 
+        if (storedUser) {
+            try {
+                const parsed = JSON.parse(storedUser);
+                setUser(parsed);   // ← FULL USER OBJECT
+            } catch (err) {
+                console.error("Failed to parse stored user:", err);
+            }
         }
     }, []);
 
-    const login = (token, role) => {
+    // Login saves full user data
+    const login = (token, fullUser) => {
         localStorage.setItem("token", token);
-        localStorage.setItem("role", role);
-        setUser({ role });
+        localStorage.setItem("user", JSON.stringify(fullUser)); // ← SAVE FULL USER
+        setUser(fullUser);
     };
 
     const logout = () => {
         localStorage.removeItem("token");
-        localStorage.removeItem("role");
+        localStorage.removeItem("user");
         setUser(null);
     };
 
