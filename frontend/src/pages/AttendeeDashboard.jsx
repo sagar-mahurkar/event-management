@@ -1,8 +1,8 @@
 // src/pages/AttendeeDashboard.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 
-const BASE_URL = import.meta.env.VITE_BASE_URL;
+const BASE_URL = (import.meta.env.VITE_BASE_URL || "").replace(/\/+$/, "") + "/";
 
 const AttendeeDashboard = () => {
   // ======================================================
@@ -10,25 +10,46 @@ const AttendeeDashboard = () => {
   // ======================================================
   const [attendee, setAttendee] = useState(null);
 
-  const axiosAuth = axios.create({
-    baseURL: (BASE_URL || "").replace(/\/+$/, "") + "/",
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  });
+  // Whether the user has a pending organizer request (set optimistic after successful POST)
+  const [hasPendingRequest, setHasPendingRequest] = useState(false);
 
+  // axios instance that attaches token automatically
+  const axiosAuth = useMemo(() => {
+    const instance = axios.create({
+      baseURL: BASE_URL,
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+    });
+
+    // (Optional) request interceptor to keep headers fresh if token changes
+    instance.interceptors.request.use((config) => {
+      const token = localStorage.getItem("token");
+      if (token) config.headers.Authorization = `Bearer ${token}`;
+      return config;
+    });
+
+    return instance;
+  }, []);
+
+  // Fetch profile (and persist it locally)
   const loadProfile = async () => {
     try {
       const res = await axiosAuth.get("users/profile");
-      const profile = res.data.profile; // ← THIS IS THE CORRECT SHAPE
-      setAttendee(profile);
-      localStorage.setItem("user", JSON.stringify(profile));
+      // Many backends return profile under res.data.profile
+      const profile = (res?.data && (res.data.profile || res.data.data || res.data)) || null;
+      if (profile) {
+        setAttendee(profile);
+        localStorage.setItem("user", JSON.stringify(profile));
+      } else {
+        console.warn("Unexpected profile shape:", res?.data);
+      }
     } catch (err) {
-      console.error("Failed loading profile", err);
+      console.error("Failed loading profile:", extractAxiosError(err));
     }
   };
 
   useEffect(() => {
     loadProfile();
-  }, []);
+  }, []); // on mount
 
   // ======================================================
   // PROFILE MODAL STATE
@@ -45,22 +66,23 @@ const AttendeeDashboard = () => {
 
   const saveProfile = async () => {
     try {
-      const body = {
-        name: profileName,
-        email: profileEmail,
-      };
-
+      const body = { name: profileName, email: profileEmail };
       const res = await axiosAuth.put("users/profile", body);
-      const updated = res.data.profile || res.data.data || res.data;
+      const updated = (res?.data && (res.data.profile || res.data.data || res.data)) || null;
 
-      localStorage.setItem("user", JSON.stringify(updated));
-      setAttendee(updated);
-
-      alert("Profile updated successfully!");
-      setShowProfileModal(false);
+      if (updated) {
+        localStorage.setItem("user", JSON.stringify(updated));
+        setAttendee(updated);
+        alert("Profile updated successfully!");
+        setShowProfileModal(false);
+      } else {
+        console.warn("Profile update returned unexpected shape:", res?.data);
+        alert("Profile updated (unexpected response shape).");
+      }
     } catch (err) {
-      console.error(err);
-      alert(err.response?.data?.message || "Failed to update profile");
+      const msg = extractAxiosError(err) || "Failed to update profile";
+      console.error("saveProfile error:", err.response?.data ?? err);
+      alert(msg);
     }
   };
 
@@ -99,20 +121,24 @@ const AttendeeDashboard = () => {
 
       const res = await axiosAuth.get("users/bookings");
       const bookings =
-        res.data.bookings ||
-        res.data.data?.bookings ||
-        res.data.data ||
+        res?.data?.bookings ||
+        res?.data?.data?.bookings ||
+        res?.data?.data ||
+        res?.data ||
         [];
+
+      // Normalize to array
+      const rows = Array.isArray(bookings) ? bookings : [];
 
       const now = new Date();
       const upcomingArr = [];
       const pastArr = [];
       const cancelledArr = [];
 
-      bookings.forEach((b) => {
-        const eventDate = new Date(b.event?.dateTime);
-        if (b.status === "cancelled") cancelledArr.push(b);
-        else if (eventDate > now) upcomingArr.push(b);
+      rows.forEach((b) => {
+        const eventDate = new Date(b?.event?.dateTime);
+        if (b?.status === "cancelled") cancelledArr.push(b);
+        else if (eventDate && eventDate > now) upcomingArr.push(b);
         else pastArr.push(b);
       });
 
@@ -123,7 +149,7 @@ const AttendeeDashboard = () => {
       setPast(pastArr);
       setCancelled(cancelledArr);
     } catch (err) {
-      console.error(err);
+      console.error("loadBookings error:", extractAxiosError(err));
       setError("Failed to load bookings");
     } finally {
       setLoading(false);
@@ -133,8 +159,10 @@ const AttendeeDashboard = () => {
   const loadMyReviews = async () => {
     try {
       const res = await axiosAuth.get("reviews/");
-      setMyReviews(res.data.data || res.data.reviews || res.data || []);
+      const data = res?.data?.data || res?.data?.reviews || res?.data || [];
+      setMyReviews(Array.isArray(data) ? data : []);
     } catch (err) {
+      console.error("loadMyReviews error:", extractAxiosError(err));
       setMyReviews([]);
     }
   };
@@ -142,8 +170,10 @@ const AttendeeDashboard = () => {
   const loadMyReports = async () => {
     try {
       const res = await axiosAuth.get("reports/user");
-      setMyReports(res.data.data || res.data.reports || res.data || []);
+      const data = res?.data?.data || res?.data?.reports || res?.data || [];
+      setMyReports(Array.isArray(data) ? data : []);
     } catch (err) {
+      console.error("loadMyReports error:", extractAxiosError(err));
       setMyReports([]);
     }
   };
@@ -152,17 +182,52 @@ const AttendeeDashboard = () => {
     loadBookings();
     loadMyReviews();
     loadMyReports();
-  }, []);
+  }, []); // mount only
 
   // ======================================================
   // ROLE UPGRADE
   // ======================================================
+  // We disable the Upgrade button if the user already has organizer role or we set hasPendingRequest after posting successfully.
   const handleRoleUpgrade = async () => {
+    if (!attendee) {
+      alert("Please load your profile first.");
+      return;
+    }
+
+    if (attendee.role && attendee.role.toLowerCase() === "organizer") {
+      alert("You are already an organizer.");
+      return;
+    }
+
     try {
-      await axiosAuth.post("users/request");
+      const res = await axiosAuth.post("users/request", {
+        message: "Requesting upgrade to Organizer role.",
+      });
+
+      // success
+      setHasPendingRequest(true);
+      // If backend returns the created request, you can show it / store it if needed.
       alert("Organizer role request submitted!");
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to submit request");
+      // Prefer backend-provided error text (`error` or `message`)
+      const backendData = err?.response?.data;
+      console.error("Organizer Upgrade Error:", backendData ?? err);
+
+      const backendMessage =
+        backendData?.error ||
+        backendData?.message ||
+        (typeof backendData === "string" ? backendData : null) ||
+        "Failed to submit request";
+
+      // If backend indicates user already has pending request, set the flag too
+      if (
+        backendMessage &&
+        /pending organizer request/i.test(String(backendMessage))
+      ) {
+        setHasPendingRequest(true);
+      }
+
+      alert(backendMessage);
     }
   };
 
@@ -214,6 +279,10 @@ const AttendeeDashboard = () => {
   // SUBMIT REVIEW / REPORT
   // ======================================================
   const submitReview = async () => {
+    if (!selectedBooking?.event?.id) {
+      alert("No event selected");
+      return;
+    }
     try {
       const payload = {
         eventId: selectedBooking.event.id,
@@ -227,7 +296,8 @@ const AttendeeDashboard = () => {
       alert("Review submitted/updated.");
       setShowReviewModal(false);
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to submit review");
+      console.error("submitReview error:", extractAxiosError(err));
+      alert(extractAxiosError(err) || "Failed to submit review");
     }
   };
 
@@ -238,12 +308,17 @@ const AttendeeDashboard = () => {
       await axiosAuth.delete(`reviews/${reviewId}`);
       await loadMyReviews();
       alert("Review deleted.");
-    } catch {
+    } catch (err) {
+      console.error("deleteReview error:", extractAxiosError(err));
       alert("Failed to delete review");
     }
   };
 
   const submitReport = async () => {
+    if (!selectedBooking?.event?.id) {
+      alert("No event selected");
+      return;
+    }
     try {
       const eventId = selectedBooking.event.id;
       await axiosAuth.post(`reports/event/${eventId}`, { reason: reportReason });
@@ -252,7 +327,8 @@ const AttendeeDashboard = () => {
       alert("Report submitted/updated.");
       setShowReportModal(false);
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to submit report");
+      console.error("submitReport error:", extractAxiosError(err));
+      alert(extractAxiosError(err) || "Failed to submit report");
     }
   };
 
@@ -283,7 +359,11 @@ const AttendeeDashboard = () => {
 
         <tbody>
           {data.length === 0 ? (
-            <tr><td colSpan="12" className="text-center">No records</td></tr>
+            <tr>
+              <td colSpan="12" className="text-center">
+                No records
+              </td>
+            </tr>
           ) : (
             data.map((b, i) => (
               <tr key={b.id}>
@@ -310,7 +390,8 @@ const AttendeeDashboard = () => {
                         try {
                           await axiosAuth.put(`bookings/${b.id}/cancel`);
                           await reloadBookings();
-                        } catch {
+                        } catch (err) {
+                          console.error("Cancel booking error:", extractAxiosError(err));
                           alert("Failed to cancel");
                         }
                       }}
@@ -354,9 +435,12 @@ const AttendeeDashboard = () => {
     if (loading) return <p>Loading...</p>;
     if (error) return <p className="text-danger">{error}</p>;
 
-    if (selected === "upcoming") return <BookingTable title="Upcoming Events" data={upcoming} reloadBookings={loadBookings} />;
-    if (selected === "past") return <BookingTable title="Past Events" data={past} reloadBookings={loadBookings} />;
-    if (selected === "cancelled") return <BookingTable title="Cancelled Bookings" data={cancelled} reloadBookings={loadBookings} />;
+    if (selected === "upcoming")
+      return <BookingTable title="Upcoming Events" data={upcoming} reloadBookings={loadBookings} />;
+    if (selected === "past")
+      return <BookingTable title="Past Events" data={past} reloadBookings={loadBookings} />;
+    if (selected === "cancelled")
+      return <BookingTable title="Cancelled Bookings" data={cancelled} reloadBookings={loadBookings} />;
 
     if (selected === "myreviews") {
       return (
@@ -399,10 +483,7 @@ const AttendeeDashboard = () => {
                         Edit
                       </button>
 
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() => deleteReview(r.id)}
-                      >
+                      <button className="btn btn-sm btn-danger" onClick={() => deleteReview(r.id)}>
                         Delete
                       </button>
                     </td>
@@ -468,31 +549,66 @@ const AttendeeDashboard = () => {
       >
         <h4>Attendee Menu</h4>
 
-        <p><strong>Welcome: {attendee?.name}</strong></p>
+        <p>
+          <strong>Welcome: {attendee?.name}</strong>
+        </p>
         <p style={{ marginTop: "-10px", color: "#666" }}>{attendee?.email}</p>
 
         <button className="btn btn-info w-100 mt-2" onClick={openProfileModal}>
           View / Edit Profile
         </button>
 
-        <button className="btn btn-warning w-100 mt-3" onClick={handleRoleUpgrade}>
-          Upgrade to Organizer
+        <button
+          className="btn btn-warning w-100 mt-3"
+          onClick={handleRoleUpgrade}
+          disabled={
+            hasPendingRequest ||
+            (attendee?.role && attendee.role.toLowerCase() === "organizer")
+          }
+          title={
+            hasPendingRequest
+              ? "You already have a pending organizer request"
+              : attendee?.role && attendee.role.toLowerCase() === "organizer"
+              ? "You are already an organizer"
+              : "Request upgrade to Organizer"
+          }
+        >
+          {attendee?.role && attendee.role.toLowerCase() === "organizer"
+            ? "You're an Organizer"
+            : hasPendingRequest
+            ? "Pending Request"
+            : "Upgrade to Organizer"}
         </button>
 
         <ul className="list-group mt-4">
-          <li className={`list-group-item ${selected === "upcoming" ? "active" : ""}`} onClick={() => setSelected("upcoming")}>
+          <li
+            className={`list-group-item ${selected === "upcoming" ? "active" : ""}`}
+            onClick={() => setSelected("upcoming")}
+          >
             Upcoming
           </li>
-          <li className={`list-group-item ${selected === "past" ? "active" : ""}`} onClick={() => setSelected("past")}>
+          <li
+            className={`list-group-item ${selected === "past" ? "active" : ""}`}
+            onClick={() => setSelected("past")}
+          >
             Past
           </li>
-          <li className={`list-group-item ${selected === "cancelled" ? "active" : ""}`} onClick={() => setSelected("cancelled")}>
+          <li
+            className={`list-group-item ${selected === "cancelled" ? "active" : ""}`}
+            onClick={() => setSelected("cancelled")}
+          >
             Cancelled
           </li>
-          <li className={`list-group-item ${selected === "myreviews" ? "active" : ""}`} onClick={() => setSelected("myreviews")}>
+          <li
+            className={`list-group-item ${selected === "myreviews" ? "active" : ""}`}
+            onClick={() => setSelected("myreviews")}
+          >
             My Reviews
           </li>
-          <li className={`list-group-item ${selected === "myreports" ? "active" : ""}`} onClick={() => setSelected("myreports")}>
+          <li
+            className={`list-group-item ${selected === "myreports" ? "active" : ""}`}
+            onClick={() => setSelected("myreports")}
+          >
             My Reports
           </li>
         </ul>
@@ -516,18 +632,10 @@ const AttendeeDashboard = () => {
             <h4>Edit Profile</h4>
 
             <label className="mt-3">Name</label>
-            <input
-              className="form-control"
-              value={profileName}
-              onChange={(e) => setProfileName(e.target.value)}
-            />
+            <input className="form-control" value={profileName} onChange={(e) => setProfileName(e.target.value)} />
 
             <label className="mt-3">Email</label>
-            <input
-              className="form-control"
-              value={profileEmail}
-              onChange={(e) => setProfileEmail(e.target.value)}
-            />
+            <input className="form-control" value={profileEmail} onChange={(e) => setProfileEmail(e.target.value)} />
 
             <div className="mt-4 d-flex justify-content-end gap-2">
               <button className="btn btn-secondary" onClick={() => setShowProfileModal(false)}>
@@ -545,27 +653,18 @@ const AttendeeDashboard = () => {
           REVIEW MODAL
       ====================================================== */}
       {showReviewModal && selectedBooking && (
-        <div className="modal-backdrop d-flex justify-content-center align-items-center"
-             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)" }}>
+        <div
+          className="modal-backdrop d-flex justify-content-center align-items-center"
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)" }}
+        >
           <div className="card p-4" style={{ minWidth: "400px" }}>
             <h4>Review: {selectedBooking.event.title}</h4>
 
             <label className="mt-3">Rating (1–5)</label>
-            <input
-              type="number"
-              min="1"
-              max="5"
-              className="form-control"
-              value={reviewRating}
-              onChange={(e) => setReviewRating(Number(e.target.value))}
-            />
+            <input type="number" min="1" max="5" className="form-control" value={reviewRating} onChange={(e) => setReviewRating(Number(e.target.value))} />
 
             <label className="mt-3">Review</label>
-            <textarea
-              className="form-control"
-              value={reviewText}
-              onChange={(e) => setReviewText(e.target.value)}
-            />
+            <textarea className="form-control" value={reviewText} onChange={(e) => setReviewText(e.target.value)} />
 
             <div className="mt-3 d-flex justify-content-end gap-2">
               <button className="btn btn-secondary" onClick={() => setShowReviewModal(false)}>
@@ -583,17 +682,15 @@ const AttendeeDashboard = () => {
           REPORT MODAL
       ====================================================== */}
       {showReportModal && selectedBooking && (
-        <div className="modal-backdrop d-flex justify-content-center align-items-center"
-             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)" }}>
+        <div
+          className="modal-backdrop d-flex justify-content-center align-items-center"
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)" }}
+        >
           <div className="card p-4" style={{ minWidth: "400px" }}>
             <h4>Report: {selectedBooking.event.title}</h4>
 
             <label className="mt-3">Reason</label>
-            <textarea
-              className="form-control"
-              value={reportReason}
-              onChange={(e) => setReportReason(e.target.value)}
-            />
+            <textarea className="form-control" value={reportReason} onChange={(e) => setReportReason(e.target.value)} />
 
             <div className="mt-3 d-flex justify-content-end gap-2">
               <button className="btn btn-secondary" onClick={() => setShowReportModal(false)}>
@@ -606,9 +703,31 @@ const AttendeeDashboard = () => {
           </div>
         </div>
       )}
-
     </div>
   );
 };
+
+// ======================================================
+// Helper: extract a friendly message from Axios errors
+// ======================================================
+function extractAxiosError(err) {
+  if (!err) return null;
+  const backendData = err.response?.data;
+  if (!backendData) {
+    if (err.message) return err.message;
+    return String(err);
+  }
+
+  // prefer common fields
+  if (typeof backendData === "string") return backendData;
+  if (backendData.error) return backendData.error;
+  if (backendData.message) return backendData.message;
+  // fallback: stringify small object
+  try {
+    return JSON.stringify(backendData);
+  } catch {
+    return String(backendData);
+  }
+}
 
 export default AttendeeDashboard;
