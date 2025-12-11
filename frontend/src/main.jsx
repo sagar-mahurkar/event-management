@@ -1,14 +1,20 @@
-import { StrictMode } from 'react'
+import { StrictMode, useContext } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider } from "react-router-dom";
 import './index.css'
-import { AuthProvider } from './context/AuthContext.jsx';
+import { AuthProvider, AuthContext } from './context/AuthContext.jsx';
 import router from './utils/router.jsx'
+
+const AppLoader = () => {
+  const { loading } = useContext(AuthContext);
+  if (loading) return <div>Loading...</div>;
+  return <RouterProvider router={router} />;
+};
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <AuthProvider>
-      <RouterProvider router={router} />
+      <AppLoader />
     </AuthProvider>
   </StrictMode>,
 )

@@ -10,6 +10,7 @@ import AdminDashboard from "../pages/AdminDashboard.jsx";
 import OrganizerDashboard from "../pages/OrganizerDashboard.jsx";
 import AttendeeDashboard from "../pages/AttendeeDashboard.jsx";
 import ProtectedRoute from "./ProtectedRoute.jsx";
+import GuestRoute from "./GuestRoute.jsx";
 
 
 const router = createBrowserRouter([
@@ -23,8 +24,16 @@ const router = createBrowserRouter([
     </>, 
     children: [
       { index: true, element: <HomePage /> },
-      { path: "login", element: <LoginPage /> },
-      { path: "register", element: <RegisterPage /> },
+      { path: "login", element: (
+        <GuestRoute>
+          <LoginPage />
+        </GuestRoute>
+      ) },
+      { path: "register", element: (
+        <GuestRoute>
+          <RegisterPage />
+        </GuestRoute>
+      ) },
       // Event route
       { path: "events/:id", element: <EventPage /> },
       { path: "admin/dashboard", element: 
