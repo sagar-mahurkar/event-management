@@ -12,7 +12,7 @@ import { User } from "./User";
 import { TicketType } from "./TicketType";
 import { Event } from "./Event";
 
-@Entity({ name: "bookings", synchronize: false })
+@Entity({ name: "bookings", synchronize: true })
 export class Booking {
     @PrimaryGeneratedColumn()
     id: number;

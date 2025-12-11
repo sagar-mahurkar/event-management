@@ -35,7 +35,7 @@ export const EventManagementDataSource = new DataSource({
   username: process.env.POSTGRES_USERNAME,
   password: process.env.POSTGRES_PASSWORD,
   database: process.env.POSTGRES_DATABASE,
-  synchronize: false,
+  synchronize: true,
   logging: false,
   // Use ** to include entities in nested folders
   entities: [path.resolve(__dirname, "../entities/**/*.ts"), path.resolve(__dirname, "../entities/**/*.js")],

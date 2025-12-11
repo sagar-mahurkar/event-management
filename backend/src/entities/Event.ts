@@ -17,7 +17,7 @@ import { TicketType } from "./TicketType";
 import { User } from "./User";
 
 
-@Entity({ name: "events", synchronize: false })
+@Entity({ name: "events", synchronize: true })
 export class Event {
     @PrimaryGeneratedColumn()
     id: number;

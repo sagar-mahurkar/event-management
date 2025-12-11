@@ -61,3 +61,7 @@ npm install
 npm run dev  
 ```
 
+## Credentials needed
+- email: `supeappdev.superuser@gmail.com`
+- password: `admin`
+

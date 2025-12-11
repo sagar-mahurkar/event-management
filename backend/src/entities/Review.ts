@@ -10,7 +10,7 @@ import {
 import { User } from "./User";
 import { Event } from "./Event";
 
-@Entity({ name: "reviews", synchronize: false })
+@Entity({ name: "reviews", synchronize: true })
 export class Review {
     @PrimaryGeneratedColumn()
     id: number;

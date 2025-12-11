@@ -15,7 +15,7 @@ import { Report } from "./Report";
 import { Waitlist } from "./Waitlist"
 import { OrganizerRequest } from "./OrganizerRequest";
 
-@Entity({ name: "users", synchronize: false })
+@Entity({ name: "users", synchronize: true })
 export class User {
     @PrimaryGeneratedColumn()
     id: number;

@@ -11,7 +11,7 @@ import { WaitingStatus } from "../utils/enums";
 import { User } from "./User";
 import { Event } from "./Event";
 
-@Entity({ name: "waitlists", synchronize: false })
+@Entity({ name: "waitlists", synchronize: true })
 export class Waitlist {
     @PrimaryGeneratedColumn()
     id: number;

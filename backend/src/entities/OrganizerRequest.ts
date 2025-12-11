@@ -10,7 +10,7 @@ import {
 import { User } from "./User";
 import { OrganizerRequestStatus } from "../utils/enums";
 
-@Entity({ name: "organizer_request", synchronize: false })
+@Entity({ name: "organizer_request", synchronize: true })
 export class OrganizerRequest {
     @PrimaryGeneratedColumn()
     id: number;

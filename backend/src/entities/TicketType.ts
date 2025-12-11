@@ -13,7 +13,7 @@ import { Booking } from "./Booking";
 import { Event } from "./Event";
 import { TicketCategory } from "../utils/enums"
 
-@Entity({ name: "ticket_types", synchronize: false })
+@Entity({ name: "ticket_types", synchronize: true })
 export class TicketType {
     @PrimaryGeneratedColumn()
     id: number;

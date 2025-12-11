@@ -11,7 +11,7 @@ import { User } from "./User";
 import { Event } from "./Event";
 import { ReportStatus } from "../utils/enums";
 
-@Entity({ name: "reports", synchronize: false })
+@Entity({ name: "reports", synchronize: true })
 export class Report {
     @PrimaryGeneratedColumn()
     id: number;
